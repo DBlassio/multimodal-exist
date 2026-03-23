@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+*.env
+
+# Data and models
+*.ckpt
+*.pt
+*.pth
+*.pt
+
+# Jupyter
+.ipynb_checkpoints
+
+# VSCode
+.vscode/
+
+# Logs
+wandb/
+mlruns/
+
+# OS
+.DS_Store
+Thumbs.db
+
