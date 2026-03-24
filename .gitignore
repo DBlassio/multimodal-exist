@@ -8,6 +8,7 @@ env/
 *.env
 
 # Data and models
+data/
 *.ckpt
 *.pt
 *.pth
