@@ -13,6 +13,7 @@ data/
 *.pt
 *.pth
 *.pt
+*.parquet
 
 # Jupyter
 .ipynb_checkpoints
