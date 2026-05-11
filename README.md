@@ -105,6 +105,8 @@ $$
 
 A more advanced architecture where cross-attention is used to model interactions between modalities before applying gated fusion.  This allows the model to learn relationships between meme content and physiological responses, while still controlling the final contribution of each modality through adaptive gates.
 
+$$z = \text{text}_{\text{enriched}} + \beta \cdot \text{vision}_{\text{attended}} + \alpha \cdot \text{eeg}_{\text{attended}} + \lambda \cdot \text{et}_{\text{attended}}$$
+
 ---
 
 ## Evaluation Metrics
