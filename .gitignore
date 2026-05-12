@@ -9,6 +9,8 @@ env/
 
 # Data and models
 data/
+inference/checkpoints/
+inference/predictions/
 *.ckpt
 *.pt
 *.pth
@@ -28,4 +30,3 @@ mlruns/
 # OS
 .DS_Store
 Thumbs.db
-
