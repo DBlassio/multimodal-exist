@@ -36,7 +36,7 @@ TEXT_MODEL_NAME  = "microsoft/mdeberta-v3-base"
 ALIGN_MODEL_NAME = "kakaobrain/align-base"
 MAX_TEXT_LENGTH  = 256
 COMMON_DIM       = 768
-BATCH_SIZE       = 32         
+BATCH_SIZE       = 64         
 GATE_TEMPERATURE = 0.3
 N_ATTN_HEADS     = 8
 
@@ -153,9 +153,9 @@ class GatedFusionModel(nn.Module):
         self.eeg_encoder = PhysioMLP(eeg_dim, common_dim, dropout)
         self.et_encoder  = PhysioMLP(et_dim,  common_dim, dropout)
 
-        self.gate_vision = nn.Linear(common_dim, 1)
-        self.gate_eeg    = nn.Linear(common_dim, 1)
-        self.gate_et     = nn.Linear(common_dim, 1)
+        self.gate_vision = nn.Linear(common_dim * 2, 1)
+        self.gate_eeg    = nn.Linear(common_dim * 2, 1) 
+        self.gate_et     = nn.Linear(common_dim * 2, 1) 
 
         self.fusion_layer = nn.Sequential(
             nn.Linear(common_dim, common_dim), 
@@ -202,9 +202,9 @@ class GatedFusionModel(nn.Module):
         et_emb  = self.et_encoder(et.float())
 
         #Gates
-        beta    = torch.sigmoid(self.gate_vision(text_emb) / GATE_TEMPERATURE)
-        alpha   = torch.sigmoid(self.gate_eeg(text_emb)    / GATE_TEMPERATURE)
-        lambda_ = torch.sigmoid(self.gate_et(text_emb)     / GATE_TEMPERATURE)
+        beta = torch.sigmoid(self.gate_vision(torch.cat([text_emb, vision_emb], dim=1))/GATE_TEMPERATURE)
+        alpha = torch.sigmoid(self.gate_eeg(torch.cat([text_emb, eeg_emb], dim=1))/GATE_TEMPERATURE)
+        lambda_ = torch.sigmoid(self.gate_et(torch.cat([text_emb, et_emb], dim=1))/GATE_TEMPERATURE)
 
         #Gate Fusion 
         z     = text_emb + beta * vision_emb + alpha * eeg_emb + lambda_ * et_emb
