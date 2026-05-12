@@ -6,7 +6,7 @@ Replicates exactly the pipeline we used on train_ready_dataset.ipynb
 How to run it:
   python prepare_test_dataset.py \
       --train_parquet data/processed/train_model_ready.parquet \
-      --test_json     EXIST2026_test_clean.json \
+      --test_json     data/memes/test/EXIST2026_test_clean.json \
       --output        data/processed/test_model_ready.parquet
 """
 
@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# ── EEG Constants (exact match with training notebook) ──────────────────────
+
+# EEG Constants (We replicate as the training notebook)
 BANDS = ["Alpha", "Beta", "Theta", "Gamma", "Delta"]
 N_CH  = 16
 AUX   = 1e-6
@@ -75,7 +76,8 @@ REGIONAL_DIFF_PAIRS = [
     ("Alpha", "Theta",  "frontal"),
 ]
 
-# ── ET Feature Mapping (exact match with training notebook) ─────────────────
+
+# ET Features Mapping (Same as the training notebook)
 ET_FEATURE_MAP = {
     "reaction_time":              "et_reaction_time",
     "fixations_count":            "et_fixations",
@@ -84,44 +86,48 @@ ET_FEATURE_MAP = {
 }
 
 
-# ── EEG Functions ────────────────────────────────────────────────────────────
+# EEG Functions
 
+# Normalize per user
 def zscore_user_eeg(user_feats):
-    keys = [f"EXG_Channel_{ch}_{band}_power"
-            for ch in range(N_CH) for band in BANDS]
+    keys = [f"EXG_Channel_{ch}_{band}_power" for ch in range(N_CH) for band in BANDS]
     vals = np.array([user_feats.get(k, np.nan) for k in keys], dtype=float)
     mask = ~np.isnan(vals)
+
     if mask.sum() > 1:
         mu, sigma = vals[mask].mean(), vals[mask].std()
         if sigma > 0:
             vals[mask] = (vals[mask] - mu) / sigma
+    
     return dict(zip(keys, vals))
 
-
+# Extract EEG Features
 def extract_eeg_user_features(d_zscored, d_raw):
     feats = {}
     d = d_zscored
 
     # 1. Raw (80): EEG_EXG_Channel_{ch}_{band}_power
+
+    # Raw Channels (80)
     for ch in range(N_CH):
         for band in BANDS:
             key = f"EXG_Channel_{ch}_{band}_power"
             feats[f"EEG_{key}"] = d.get(key, np.nan)
 
-    # 2. Global (5): EEG_{band}_global
+    # Global (5)
     for band in BANDS:
         vals = [d.get(f"EXG_Channel_{ch}_{band}_power", np.nan) for ch in range(N_CH)]
         vals = [v for v in vals if not np.isnan(v)]
         feats[f"EEG_{band}_global"] = np.mean(vals) if vals else np.nan
 
-    # 3. Regional (30): EEG_{band}_{region}
+    # Per Region (30)
     for region, ch_list in REGION_MAP.items():
         for band in BANDS:
             vals = [d.get(f"EXG_Channel_{ch}_{band}_power", np.nan) for ch in ch_list]
             vals = [v for v in vals if not np.isnan(v)]
             feats[f"EEG_{band}_{region}"] = np.mean(vals) if vals else np.nan
 
-    # 4. Lateralization (10): EEG_{band}_left / EEG_{band}_right
+    # Lateralization (10)
     for band in BANDS:
         l_vals = [d.get(f"EXG_Channel_{ch}_{band}_power", np.nan) for ch in LEFT_CHANNELS]
         r_vals = [d.get(f"EXG_Channel_{ch}_{band}_power", np.nan) for ch in RIGHT_CHANNELS]
@@ -130,22 +136,21 @@ def extract_eeg_user_features(d_zscored, d_raw):
         feats[f"EEG_{band}_left"]  = np.mean(l_vals) if l_vals else np.nan
         feats[f"EEG_{band}_right"] = np.mean(r_vals) if r_vals else np.nan
 
-    # 5. Global diffs (9): EEG_{b1}_minus_{b2}_global
+    # Global diffs (9)
     for b1, b2 in GLOBAL_DIFF_PAIRS:
         v1 = feats.get(f"EEG_{b1}_global", np.nan)
         v2 = feats.get(f"EEG_{b2}_global", np.nan)
         feats[f"EEG_{b1}_minus_{b2}_global"] = (
             v1 - v2 if not (np.isnan(v1) or np.isnan(v2)) else np.nan)
 
-    # 6. Regional diffs (19): EEG_{b1}_minus_{b2}_{region}
+    #Regional diffs (19)
     for b1, b2, region in REGIONAL_DIFF_PAIRS:
         v1 = feats.get(f"EEG_{b1}_{region}", np.nan)
         v2 = feats.get(f"EEG_{b2}_{region}", np.nan)
         feats[f"EEG_{b1}_minus_{b2}_{region}"] = (
             v1 - v2 if not (np.isnan(v1) or np.isnan(v2)) else np.nan)
 
-    # 7. Log-ratios (30): EEG_log_{num}_{den}_ratio_{region}
-    #    Uses raw (non z-scored) values with abs() — exact match with training
+    # Log-ratios (30) we used non-zscored with abs (same as training)
     for region, ch_list in REGION_MAP.items():
         for num, den in LOG_RATIO_PAIRS:
             raw_num = [d_raw.get(f"EXG_Channel_{ch}_{num}_power", np.nan) for ch in ch_list]
@@ -199,8 +204,9 @@ def aggregate_eeg_features(eeg_by_user):
     return result
 
 
-# ── ET Functions ─────────────────────────────────────────────────────────────
+# ET Functions
 
+#ET Features
 def aggregate_et_features(et_by_user):
     result = {"et_n_users": 0}
     for feat_name in ET_FEATURE_MAP.values():
@@ -223,8 +229,8 @@ def aggregate_et_features(et_by_user):
                 collected[raw_key].append(v)
 
     # Unit conversions (exact match with training notebook)
-    collected["reaction_time"]              = [x / 1_000     for x in collected["reaction_time"]]
-    collected["fixations_duration_mean_ns"] = [x / 1_000_000 for x in collected["fixations_duration_mean_ns"]]
+    collected["reaction_time"] = [x/1_000 for x in collected["reaction_time"]]
+    collected["fixations_duration_mean_ns"] = [x/1_000_000 for x in collected["fixations_duration_mean_ns"]]
 
     for raw_key, feat_name in ET_FEATURE_MAP.items():
         vals = pd.to_numeric(pd.Series(collected[raw_key]), errors="coerce").dropna()
@@ -235,25 +241,25 @@ def aggregate_et_features(et_by_user):
     return result
 
 
-# ── Main pipeline ────────────────────────────────────────────────────────────
+# MAIN PIPELINE --- 
 
 def build_test_dataframe(test_json_path):
-    with open(test_json_path) as f:
+    with open(test_json_path, encoding="utf-8") as f:
         data = json.load(f)
 
     rows = []
     for _, record in data.items():
         row = {
-            "id":         record["id_EXIST"],
-            "lang":       record["lang"],
-            "text":       record.get("text", ""),
+            "id": record["id_EXIST"],
+            "lang": record["lang"],
+            "text": record.get("text", ""),
             "image_file": record.get("meme", ""),
-            "split":      record.get("split", ""),
-        }
+            "split": record.get("split", "")}
+        
         sensorial  = record.get("sensorial", {})
         modalities = sensorial.get("modalities", {})
-        row.update(aggregate_eeg_features(modalities.get("EEG", {}).get("by_user", {})))
-        row.update(aggregate_et_features(modalities.get("ET",  {}).get("by_user", {})))
+        row.update(aggregate_eeg_features(modalities.get("EEG",{}).get("by_user", {})))
+        row.update(aggregate_et_features(modalities.get("ET", {}).get("by_user", {})))
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -277,14 +283,12 @@ def align_and_impute(df_test, df_train):
             missing.append(col)
 
     if missing:
-        print(f"  [WARN] {len(missing)} cols missing → imputed. Sample: {missing[:3]}")
+        print(f"  [WARN] {len(missing)} cols missing are imputed. Sample: {missing[:3]}")
 
     n_before = df_out[feature_cols].isna().sum().sum()
     df_out[feature_cols] = df_out[feature_cols].fillna(train_means)
-    n_after  = df_out[feature_cols].isna().sum().sum()
+    n_after = df_out[feature_cols].isna().sum().sum()
     print(f"  Imputed {n_before} NaNs ({n_after} remaining)")
-
-    # Drop EEG_n_users — same as training notebook
     df_out.drop(columns=["EEG_n_users"], inplace=True, errors="ignore")
 
     return df_out
@@ -293,12 +297,12 @@ def align_and_impute(df_test, df_train):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_parquet", default="data/processed/train_model_ready.parquet")
-    parser.add_argument("--test_json",     default="EXIST2026_test_clean.json")
-    parser.add_argument("--output",        default="data/processed/test_model_ready.parquet")
+    parser.add_argument("--test_json", default="data/memes/test/EXIST2026_test_clean.json")
+    parser.add_argument("--output", default="data/processed/test_model_ready.parquet")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("EXIST 2026 — Test Set Preprocessing (v2)")
+    print("Test Set Preprocessing")
     print("=" * 60)
     print(f"  EEG features expected: {len(EEG_FEATURE_NAMES)}")
 
@@ -320,17 +324,16 @@ def main():
     et_train_v  = sorted([c for c in df_train.columns if c.startswith("et_")])
     print(f"\n── Validation ──────────────────────────────────")
     print(f"  EEG: train={len(eeg_train_v)} test={len(eeg_test)} "
-          f"{'✓ OK' if eeg_train_v == eeg_test else '✗ MISMATCH'}")
+          f"{'  OK' if eeg_train_v == eeg_test else 'X MISMATCH'}")
     print(f"  ET:  train={len(et_train_v)} test={len(et_test)} "
-          f"{'✓ OK' if et_train_v == et_test else '✗ MISMATCH'}")
+          f"{'  OK' if et_train_v == et_test else 'X MISMATCH'}")
 
     # Save
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     df_test.to_parquet(args.output, index=False)
-    print(f"\n✓ Saved: {args.output}")
+    print(f"\n  Saved: {args.output}")
     print(f"  Shape: {df_test.shape}")
     print(f"  NaN: {df_test.isna().sum().sum()}")
-    print(df_test[["id", "lang", "text"]].head(3).to_string())
 
 
 if __name__ == "__main__":
