@@ -11,6 +11,7 @@ env/
 data/
 inference/checkpoints/
 inference/predictions/
+inference/submissions/
 *.ckpt
 *.pt
 *.pth
