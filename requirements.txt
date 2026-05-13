@@ -10,3 +10,4 @@ torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.
 sentencepiece==0.2.1
 tiktoken==0.12.0
 protobuf
+openpyxl
