@@ -32,7 +32,7 @@ import pandas as pd
 
 # ── Config ───────────────────────────────────────────────────────────────────
 TEAM_NAME  = "Cloud-17"
-TEST_CASE  = "EXIST2026"    # per official guidelines
+TEST_CASE  = "EXIST2025"    # per official guidelines
 
 TASK23_SOFT_COLS = [
     "p23_ideological",
@@ -52,13 +52,13 @@ TASK23_HARD_LABELS = [
 # Task 2.1 threshold
 T21 = 0.50
 
-# Task 2.3 per-category thresholds (lower for rare categories)
-T23 = {
-    "p23_ideological":     0.45,
-    "p23_stereotyping":    0.45,
-    "p23_objectification": 0.40,
-    "p23_sexual_violence": 0.30,
-    "p23_misogyny":        0.20,
+# Expected Distribution based on our EDA. 
+TRAIN_FREQ = {
+    "p23_ideological":     0.290,
+    "p23_stereotyping":    0.225,
+    "p23_objectification": 0.220,
+    "p23_sexual_violence": 0.068,
+    "p23_misogyny":        0.025,
 }
 
 # Available model predictions. Parquet filename mapping.
@@ -86,6 +86,15 @@ def compute_ensemble_no_baseline(pred_dir):
     for col in prob_cols:
         df[col] = (gated[col].values + cross[col].values) / 2.0
     return df
+
+#We calculate our thresholds based on our expected distribution
+def calibrate_t23(df):
+    """Compute per-category thresholds matching training frequency."""
+    sexist = df[df["p21"] >= T21]
+    thresholds = {}
+    for col, freq in TRAIN_FREQ.items():
+        thresholds[col] = float(np.percentile(sexist[col], 100 * (1 - freq)))
+    return thresholds
 
 
 def hard_21(p21): 
@@ -115,7 +124,7 @@ def soft_22(p21, p22_direct, p22_judgemental):
         "JUDGEMENTAL":  round(p * p_j, 6),
     }
 
-def hard_23(p21, row):
+def hard_23(p21, row,T23):
     """Multi-label: NO if non-sexist, else categories above threshold."""
     if p21 < T21:
         return ["NO"]
@@ -131,14 +140,9 @@ def hard_23(p21, row):
     return active
 
 def soft_23(p21, row):
-    """Multi-label soft:
-      - NO = 1-p21, 
-      - each cat = p21 × p(cat|sexist).
-      """
-    p = float(p21)
-    out = {"NO": round(1.0 - p, 6)}
+    out = {"NO": round(1.0 - float(p21), 6)}
     for col, label in zip(TASK23_SOFT_COLS, TASK23_HARD_LABELS):
-        out[label] = round(p * float(row[col]), 6)
+        out[label] = round(float(row[col]), 6)
     return out
 
 
@@ -176,11 +180,11 @@ def build_task22(df, mode):
     return records
 
 
-def build_task23(df, mode):
+def build_task23(df, mode,t23=None):
     records = []
     for _, row in df.iterrows():
         p21 = float(row["p21"])
-        value = (hard_23(p21, row) if mode == "hard"
+        value = (hard_23(p21, row,t23) if mode == "hard"
                  else soft_23(p21, row))
         records.append({
             "test_case": TEST_CASE,
@@ -238,7 +242,7 @@ def main():
     print(f"EXIST 2026 — Format Submissions — Team: {TEAM_NAME}")
     print("=" * 60)
     print(f"Runs: {args.runs}")
-    print(f"T21={T21}  T23={T23}\n")
+    print(f"T21={T21}  (T23 calibrated by model)\n")
 
     # ── Load predictions ───────────────────────────────────────────────────
     dfs = {}
@@ -254,23 +258,22 @@ def main():
     # ── Generate files per run ────────────────────────────────────────────
     for run_id, model in enumerate(args.runs, start=1):
         df = dfs[model]
+        t23_model = calibrate_t23(df)
         print(f"\nRun {run_id}: {model}")
+        print(f"  Thresholds for hard task 2.3 calibrated: { {k.split('_')[1]: round(v,4) for k,v in t23_model.items()} }")
 
-        for task_num, (builder_hard, builder_soft) in enumerate(
-            [(build_task21, build_task21),
-             (build_task22, build_task22),
-             (build_task23, build_task23)], start=1):
-
+        # Tasks 2.1 y 2.2
+        for task_num, builder in enumerate([build_task21, build_task22], start=1):
             task_str = f"task2_{task_num}"
+            for mode in ["hard", "soft"]:
+                records = builder(df, mode)
+                fname   = f"{task_str}_{mode}_{TEAM_NAME}_{run_id}"
+                write_json(records, os.path.join(submission_folder, fname))
 
-            # Hard
-            records = builder_hard(df, "hard")
-            fname   = f"{task_str}_hard_{TEAM_NAME}_{run_id}"
-            write_json(records, os.path.join(submission_folder, fname))
-
-            # Soft
-            records = builder_soft(df, "soft")
-            fname   = f"{task_str}_soft_{TEAM_NAME}_{run_id}"
+        # Task 2.3
+        for mode in ["hard", "soft"]:
+            records = build_task23(df, mode, t23=t23_model)
+            fname   = f"task2_3_{mode}_{TEAM_NAME}_{run_id}"
             write_json(records, os.path.join(submission_folder, fname))
 
     # ── Summary ──────────────────────────────────────────────────────────
