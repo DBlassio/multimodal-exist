@@ -25,6 +25,16 @@ from openpyxl.utils import get_column_letter
 T21   = 0.5    # Task 2.1: sexist if p21 >= T21
 T23   = 0.5    # Task 2.3: category active if p_cat >= T23
 
+# Expected Distribution based on our EDA.  Based on this we will create our thresholds.
+TRAIN_FREQ = {
+    "p23_ideological":     0.290,
+    "p23_stereotyping":    0.225,
+    "p23_objectification": 0.220,
+    "p23_sexual_violence": 0.068,
+    "p23_misogyny":        0.025,
+}
+
+
 CAT_COLS = {
     "ideological":   "p23_ideological",
     "misogyny":      "p23_misogyny",
@@ -68,9 +78,22 @@ def hard_22(df, h21_series):
             pred.append("DIRECT" if row["p22_direct"] >= row["p22_judgemental"] else "JUDGEMENTAL")
     return pd.Series(pred, index=df.index)
 
+
+#Helper
+
+#We calculate our thresholds based on our expected distribution
+def calibrate_t23(df):
+    """Compute per-category thresholds matching training frequency."""
+    sexist = df[df["p21"] >= T21]
+    thresholds = {}
+    for col, freq in TRAIN_FREQ.items():
+        thresholds[col] = float(np.percentile(sexist[col], 100 * (1 - freq)))
+    return thresholds
+
+
 # 2.3 Category Hard Label
 def hard_23_cats(df, h21_series):
-    """Returns dict of category → binary series (only for sexist memes)"""
+    t23_model = calibrate_t23(df)
     result = {}
     for short, col in CAT_COLS.items():
         vals = []
@@ -78,7 +101,7 @@ def hard_23_cats(df, h21_series):
             if h21_series.iloc[i] == 0:
                 vals.append(0)
             else:
-                vals.append(int(row[col] >= T23))
+                vals.append(int(row[col] >= t23_model[col]))
         result[short] = pd.Series(vals, index=df.index)
     return result
 
