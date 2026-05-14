@@ -210,7 +210,14 @@ class GatedFusionModel(nn.Module):
         z     = text_emb + beta * vision_emb + alpha * eeg_emb + lambda_ * et_emb
         fused = self.fusion_layer(z)
         
-        return self.head_21(fused), self.head_22(fused), self.head_23(fused)
+        return (
+            self.head_21(fused),
+            self.head_22(fused),
+            self.head_23(fused),
+            beta.squeeze(1),    # (B,) escalar per meme
+            alpha.squeeze(1),
+            lambda_.squeeze(1),
+        )
 
 
 class CrossAttentionGatedModel(nn.Module):
@@ -384,6 +391,7 @@ def run_single_checkpoint(model, loader, model_type):
     """
     model.eval()
     results = {}
+    gates = {}
 
     for batch in tqdm(loader, desc="    batches", leave=False):
         with autocast(dtype=torch.bfloat16):
@@ -393,7 +401,19 @@ def run_single_checkpoint(model, loader, model_type):
                     batch["attention_mask"].to(DEVICE),
                     batch["pixel_values"].to(DEVICE),
                     batch["physio"].to(DEVICE))
-            else:  #  In csae of gated or cross_attention
+            elif model_type == "gated":  #  In csae of gated
+                l21, l22, l23, beta, alpha, lambda_ = model(
+                    batch["input_ids"].to(DEVICE),
+                    batch["attention_mask"].to(DEVICE),
+                    batch["pixel_values"].to(DEVICE),
+                    batch["eeg"].to(DEVICE),
+                    batch["et"].to(DEVICE))
+                for i, mid in enumerate(batch["ids"]):
+                    gates[mid] = (
+                        float(beta[i].float()),
+                        float(alpha[i].float()),
+                        float(lambda_[i].float()))
+            else:  # cross_attention
                 l21, l22, l23 = model(
                     batch["input_ids"].to(DEVICE),
                     batch["attention_mask"].to(DEVICE),
@@ -408,13 +428,14 @@ def run_single_checkpoint(model, loader, model_type):
         for i, mid in enumerate(batch["ids"]):
             results[mid] = (float(p21[i]), p22[i], p23[i])
 
-    return results
+    return results, gates
 
 
-def average_fold_results(fold_results_list):
-    """Average predictions across folds for one model."""
+def average_fold_results(fold_results_list, fold_gates_list=None):
     all_ids = list(fold_results_list[0].keys())
     averaged = {}
+    averaged_gates = {}
+
     for mid in all_ids:
         p21s = [r[mid][0] for r in fold_results_list]
         p22s = [r[mid][1] for r in fold_results_list]
@@ -424,7 +445,18 @@ def average_fold_results(fold_results_list):
             np.mean(p22s, axis=0),
             np.mean(p23s, axis=0),
         )
-    return averaged
+        # Promediar gates si están disponibles
+        if fold_gates_list and fold_gates_list[0]:
+            betas   = [g[mid][0] for g in fold_gates_list if mid in g]
+            alphas  = [g[mid][1] for g in fold_gates_list if mid in g]
+            lambdas = [g[mid][2] for g in fold_gates_list if mid in g]
+            averaged_gates[mid] = (
+                float(np.mean(betas)),
+                float(np.mean(alphas)),
+                float(np.mean(lambdas)),
+            )
+
+    return averaged, averaged_gates
 
 
 def results_to_df(results_dict, meme_ids):
@@ -507,6 +539,8 @@ def main():
         print(f"{'='*60}")
 
         fold_results = []
+        fold_gates = []
+
         for ckpt_file in ckpt_files:
             ckpt_path = os.path.join(args.ckpt_dir, model_name, ckpt_file)
             print(f"  Loading: {ckpt_file}")
@@ -515,14 +549,15 @@ def main():
             state = torch.load(ckpt_path, map_location=DEVICE)
             model.load_state_dict(state)
 
-            results = run_single_checkpoint(model, loader, model_type)
+            results, gates = run_single_checkpoint(model, loader, model_type)
             fold_results.append(results)
+            fold_gates.append(gates)
 
             del model
             torch.cuda.empty_cache()
 
         # Average across folds
-        avg_results = average_fold_results(fold_results)
+        avg_results, avg_gates = average_fold_results(fold_results, fold_gates)
         all_model_results[model_name] = avg_results
 
         # Save per-model predictions
@@ -532,6 +567,16 @@ def main():
         print(f"  Saved to {out_path}")
         print(f"  p21 mean: {df_preds['p21'].mean():.4f}  "
               f"p21 > 0.5: {(df_preds['p21'] > 0.5).mean():.1%}")
+        
+        # Save Gates per meme
+        if avg_gates:
+            gates_rows = [{"id": mid, "gate_beta":   g[0], "gate_alpha":  g[1], "gate_lambda": g[2]} for mid, g in avg_gates.items()]
+            gates_path = os.path.join(args.output_dir, "gated_gates.parquet")
+            pd.DataFrame(gates_rows).to_parquet(gates_path, index=False)
+            print(f"  Gates saved → {gates_path}")
+            print(f"  β mean={np.mean([g[0] for g in avg_gates.values()]):.3f}  "
+                f"α mean={np.mean([g[1] for g in avg_gates.values()]):.3f}  "
+                f"λ mean={np.mean([g[2] for g in avg_gates.values()]):.3f}")
 
     #Ensemble: Average across our 3 models
     print(f"\n{'='*60}")
