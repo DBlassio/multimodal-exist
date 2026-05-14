@@ -1,0 +1,149 @@
+"""
+Demo API
+
+Run:
+  cd inference/api
+  uvicorn main:app --reload --port 8000
+
+Then open: http://localhost:8000/docs
+"""
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Optional
+import os
+
+from data_loader import DataLoader
+
+# ── Paths (relative to project root, adjust if needed) ──────────────────────
+
+#Paths
+PRED_DIR    = Path("../../inference/predictions")
+IMG_DIR     = Path("../../data/memes/test/memes")
+TEST_PARQUET = Path("../../data/processed/test_model_ready.parquet")
+STATIC_DIR  = Path("static")
+
+dl: DataLoader = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global dl
+
+    #Load Prediction Data
+    print("Loading prediction data...")
+    dl = DataLoader(pred_dir=PRED_DIR,test_parquet=TEST_PARQUET)
+
+    print(f"    {len(dl.df)} memes loaded")
+    print(f"    Models: {dl.available_models}")
+    yield
+    print("Shutting down.")
+
+app = FastAPI(
+    title="Multimodal Sexism Detection Demo",
+    description="Demo API - Diego Blassio",
+    version="1.0.0",
+    lifespan=lifespan)
+
+# Static File
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+# Routes
+@app.get("/", include_in_schema=False)
+async def home():
+    return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/explorer", include_in_schema=False)
+async def explorer():
+    return FileResponse(STATIC_DIR / "explorer.html")
+
+@app.get("/gates", include_in_schema=False)
+async def gates_page():
+    return FileResponse(STATIC_DIR / "gates.html")
+
+@app.get("/disagree", include_in_schema=False)
+async def disagree_page():
+    return FileResponse(STATIC_DIR / "disagree.html")
+
+
+#Images Serving
+@app.get("/images/{filename}", include_in_schema=False)
+async def serve_image(filename: str):
+    path = IMG_DIR / filename
+    if not path.exists():
+        # Return placeholder if image not found
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path)
+
+
+# API Endpoints
+
+#Glogal Stats
+@app.get("/api/stats")
+async def get_stats():
+    """
+    Global statistics per model.
+    index.html dashboard
+    """
+    return JSONResponse(dl.get_stats())
+
+
+# Get Memes and Description
+@app.get("/api/memes")
+async def get_memes(
+    page:int = Query(1,    ge=1),
+    page_size:int = Query(20, ge=1, le=100),
+    lang: Optional[str] = Query(None, description="'en' or 'es'"),
+    prediction: Optional[str] = Query(None, description="'sexist' or 'not_sexist'"),
+    model: Optional[str] = Query(None, description="Model to filter by prediction"),
+    search: Optional[str] = Query(None, description="Text search in meme text"),
+):
+    """
+    Paginated meme list with optional filters.
+    Used by: explorer.html
+    """
+    results = dl.get_memes(
+        page=page,
+        page_size=page_size,
+        lang=lang,
+        prediction=prediction,
+        model=model,
+        search=search,
+    )
+    return JSONResponse(results)
+
+# Per Meme Full Description and Prediction
+@app.get("/api/memes/{meme_id}")
+async def get_meme(meme_id: str):
+    """
+    Full prediction details for one meme (all models + gates).
+    Used by: explorer.html detail panel, gates.html
+    """
+    meme = dl.get_meme_detail(meme_id)
+    if meme is None:
+        raise HTTPException(status_code=404, detail=f"Meme {meme_id} not found")
+    return JSONResponse(meme)
+
+
+# Show sorted by disagreement score 
+@app.get("/api/disagreements")
+async def get_disagreements(
+    page:      int = Query(1,  ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    task:      str = Query("2.1", description="Task to check disagreement on: '2.1', '2.2', '2.3'"),
+):
+    """
+    Memes where models disagree, sorted by disagreement score.
+    Used by: disagree.html
+    """
+    results = dl.get_disagreements(page=page, page_size=page_size, task=task)
+    return JSONResponse(results)
+
+#List of Models available 
+@app.get("/api/models")
+async def get_models():
+    """List of available models."""
+    return JSONResponse({"models": dl.available_models})
