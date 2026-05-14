@@ -8,8 +8,10 @@ import numpy as np
 from pathlib import Path
 from typing import Optional
 
+
 T21 = 0.50
 
+#Distribution based on our EDA (Train dataset)
 TRAIN_FREQ = {
     "p23_ideological":     0.290,
     "p23_stereotyping":    0.225,
@@ -18,6 +20,7 @@ TRAIN_FREQ = {
     "p23_misogyny":        0.025,
 }
 
+# Mapping Category labels
 CAT_COLS = {
     "IDEOLOGICAL-INEQUALITY":       "p23_ideological",
     "MISOGYNY-NON-SEXUAL-VIOLENCE": "p23_misogyny",
@@ -26,6 +29,8 @@ CAT_COLS = {
     "STEREOTYPING-DOMINANCE":       "p23_stereotyping",
 }
 
+
+#Model Labels
 MODEL_LABELS = {
     "baseline":       "Early Fusion",
     "gated":          "Gated Fusion",
@@ -34,8 +39,10 @@ MODEL_LABELS = {
 }
 
 
+#DataLoader ---------------------------------------------------------------------------------------
 class DataLoader:
     def __init__(self, pred_dir: Path, test_parquet: Path):
+
         self.pred_dir = Path(pred_dir)
 
         # Data
@@ -63,16 +70,19 @@ class DataLoader:
             g["id"] = g["id"].astype(str)
             self.gates = g.set_index("id")
 
-        # ── Calibrated thresholds for Task 2.3 ───────────────────────────
+        #We load our calibrated thresholds
         self.t23 = {}
         if "gated" in self.preds:
             self.t23 = self._calibrate_t23("gated")
 
-        # ── Build main DataFrame ──────────────────────────────────────────
+        # Build main df
         self.df = self._build_main_df()
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
+    
+    
+    # Helpers and Functions --------------------------------------------------------------
 
+    #Calculate our calibrated t23 thresholds
     def _calibrate_t23(self, model: str) -> dict:
         df = self.preds[model]
         sexist = df[df["p21"] >= T21]
@@ -81,29 +91,34 @@ class DataLoader:
             thresholds[col] = float(np.percentile(sexist[col], 100 * (1 - freq)))
         return thresholds
 
+    # Task 2.1 Hard (Sexist or not sexist)
     def _hard_21(self, p21: float) -> str:
         return "SEXIST" if p21 >= T21 else "NOT SEXIST"
 
+    # Task 2.2 Hard (Direct / Judgemental)
     def _hard_22(self, p21: float, p_direct: float, p_judg: float) -> str:
         if p21 < T21:
             return "NO"
         return "DIRECT" if p_direct >= p_judg else "JUDGEMENTAL"
 
+    # Task 2.3 Hard (Multilabel)
     def _hard_23(self, p21: float, row: pd.Series, t23: dict) -> list:
         if p21 < T21:
             return ["NO"]
-        active = [label for label, col in CAT_COLS.items()
-                  if float(row.get(col, 0)) >= t23.get(col, 0.5)]
+        #Extract labels were the threshold was surprassed 
+        active = [label for label, col in CAT_COLS.items() if float(row.get(col, 0)) >= t23.get(col, 0.5)]
+        #If not, set the label with the highest value
         if not active:
             best_col = max(CAT_COLS.values(), key=lambda c: float(row.get(c, 0)))
             best_label = [l for l, c in CAT_COLS.items() if c == best_col][0]
             active = [best_label]
         return active
 
+    #Function to merge the data with the predictions with all our models
     def _build_main_df(self) -> pd.DataFrame:
-        """Merge metadata with predictions from all models."""
+        
         df = self.meta.copy()
-
+        
         for model, preds in self.preds.items():
             short = model[:4]   # base, gate, cros, ense
             df[f"{model}_p21"]  = preds["p21"]
@@ -160,13 +175,14 @@ class DataLoader:
         # Gate summary
         if self.gates is not None:
             stats["gates_summary"] = {
-                "beta_mean": round(float(self.gates["gate_beta"].mean()),   3),
-                "alpha_mean": round(float(self.gates["gate_alpha"].mean()),  3),
-                "lambda_mean": round(float(self.gates["gate_lambda"].mean()), 3),
+                "β-mean (Image weight)": round(float(self.gates["gate_beta"].mean()),3),
+                "α-mean (EEG weight)": round(float(self.gates["gate_alpha"].mean()),3),
+                "λ-mean (ET weight)": round(float(self.gates["gate_lambda"].mean()),3),
             }
 
         return stats
 
+    #Function to get memes based on lang, prediction (Sexist or not), model, and some text.
     def get_memes(self, page: int, page_size: int,
                   lang: Optional[str] = None,
                   prediction: Optional[str] = None,
@@ -195,87 +211,87 @@ class DataLoader:
 
         memes = []
         for _, row in page_df.iterrows():
+            #Per Meme
             meme = {
-                "id":         str(row["id"]),
-                "lang":       row["lang"],
-                "text":       str(row["text"])[:300],
-                "image_file": str(row["image_file"]),
-                "predictions": {}
-            }
+                "id":str(row["id"]),
+                "lang":row["lang"],
+                "text":str(row["text"])[:300],
+                "image_file":str(row["image_file"]),
+                "predictions":{}
+                }
+            #Per that meme we extract the info of that model prediction
             for m in self.available_models:
                 meme["predictions"][m] = {
-                    "label":  MODEL_LABELS.get(m, m),
+                    "label":MODEL_LABELS.get(m, m),
                     "pred21": row[f"{m}_pred21"],
-                    "p21":    round(float(row[f"{m}_p21"]), 4),
+                    "p21":round(float(row[f"{m}_p21"]), 4),
                 }
+
             meme["models_agree"] = bool(row["models_agree_21"])
             memes.append(meme)
 
         return {
-            "total":     total,
-            "page":      page,
-            "page_size": page_size,
-            "pages":     max(1, -(-total // page_size)),   # ceiling div
-            "memes":     memes,
+            "total":total,
+            "page":page,
+            "page_size":page_size,
+            "pages":max(1, -(-total // page_size)),   # ceiling div
+            "memes":memes,
         }
-
+    
+    #Function to get full detail of ONE meme
     def get_meme_detail(self, meme_id: str) -> Optional[dict]:
         """Full detail for one meme: predictions + gates + categories."""
         row_df = self.df[self.df["id"] == meme_id]
+
         if row_df.empty:
             return None
 
         row = row_df.iloc[0]
 
         detail = {
-            "id":         meme_id,
-            "lang":       row["lang"],
-            "text":       str(row["text"]),
-            "image_file": str(row["image_file"]),
-            "models_agree_21": bool(row["models_agree_21"]),
-            "disagree_score":  round(float(row["disagree_score"]), 4),
+            "id":meme_id,
+            "lang":row["lang"],
+            "text":str(row["text"]),
+            "image_file":str(row["image_file"]),
+            "models_agree_21":bool(row["models_agree_21"]),
+            "disagree_score": round(float(row["disagree_score"]), 4),
             "predictions": {},
-            "gates": None,
-        }
+            "gates": None,}
 
         # Predictions per model
         for model in self.available_models:
-            p21    = float(row[f"{model}_p21"])
-            p_d    = float(row[f"{model}_p22_direct"])
-            p_j    = float(row[f"{model}_p22_judg"])
+            p21 = float(row[f"{model}_p21"])
+            p_d = float(row[f"{model}_p22_direct"])
+            p_j = float(row[f"{model}_p22_judg"])
             pred22 = self._hard_22(p21, p_d, p_j)
 
-            cat_probs = {label: round(float(row[f"{model}_{col}"]), 4)
-                         for label, col in CAT_COLS.items()}
-            pred23    = self._hard_23(p21, row.rename(
-                {f"{model}_{col}": col for col in CAT_COLS.values()}),
-                self.t23)
+            cat_probs = {label: round(float(row[f"{model}_{col}"]), 4) for label, col in CAT_COLS.items()}
+            pred23 = self._hard_23(p21, row.rename({f"{model}_{col}": col for col in CAT_COLS.values()}),self.t23)
 
             detail["predictions"][model] = {
-                "label":       MODEL_LABELS.get(model, model),
-                "pred21":      self._hard_21(p21),
-                "p21":         round(p21, 4),
-                "pred22":      pred22,
-                "p22_direct":  round(p_d, 4),
-                "p22_judg":    round(p_j, 4),
-                "pred23":      pred23,
-                "cat_probs":   cat_probs,
-            }
+                "label":MODEL_LABELS.get(model, model),
+                "pred21":self._hard_21(p21),
+                "p21":round(p21, 4),
+                "pred22":pred22,
+                "p22_direct":round(p_d, 4),
+                "p22_judg":round(p_j, 4),
+                "pred23":pred23,
+                "cat_probs":cat_probs}
 
         # Gate values (Gated model only)
         if self.gates is not None and meme_id in self.gates.index:
             g = self.gates.loc[meme_id]
             detail["gates"] = {
-                "beta":   round(float(g["gate_beta"]),   4),
-                "alpha":  round(float(g["gate_alpha"]),  4),
-                "lambda": round(float(g["gate_lambda"]), 4),
-            }
-
+                "β (Image weight)": round(float(g["gate_beta"]),4),
+                "α (EEG weight)": round(float(g["gate_alpha"]),4),
+                "λ (ET weight)": round(float(g["gate_lambda"]),4)}
+            
         return detail
 
-    def get_disagreements(self, page: int, page_size: int,
-                          task: str = "2.1") -> dict:
+    # Function to calculate and extract disagreements by task
+    def get_disagreements(self, page: int, page_size: int, task: str = "2.1") -> dict:
         """Memes sorted by disagreement score."""
+        
         df = self.df.copy()
 
         if task == "2.1":
@@ -292,26 +308,26 @@ class DataLoader:
 
         memes = []
         for _, row in page_df.iterrows():
+            
             meme = {
-                "id":             str(row["id"]),
-                "lang":           row["lang"],
-                "text":           str(row["text"])[:300],
-                "image_file":     str(row["image_file"]),
-                "disagree_score": round(float(row["disagree_score"]), 4),
-                "predictions":    {}
-            }
+                "id":str(row["id"]),
+                "lang":row["lang"],
+                "text":str(row["text"])[:300],
+                "image_file":str(row["image_file"]),
+                "disagree_score":round(float(row["disagree_score"]), 4),
+                "predictions":{}}
+            
             for m in self.available_models:
                 meme["predictions"][m] = {
-                    "label":  MODEL_LABELS.get(m, m),
+                    "label": MODEL_LABELS.get(m, m),
                     "pred21": row[f"{m}_pred21"],
-                    "p21":    round(float(row[f"{m}_p21"]), 4),
-                }
+                    "p21": round(float(row[f"{m}_p21"]), 4)}
+                
             memes.append(meme)
 
         return {
-            "total":     total,
-            "page":      page,
+            "total": total,
+            "page": page,
             "page_size": page_size,
-            "pages":     max(1, -(-total // page_size)),
-            "memes":     memes,
-        }
+            "pages": max(1, -(-total // page_size)),
+            "memes": memes}
