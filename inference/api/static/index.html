@@ -159,6 +159,7 @@
   <ul class="nav-links">
     <li><a href="/" class="active">Overview</a></li>
     <li><a href="/explorer">Explorer</a></li>
+    <li><a href="/train">Train Dataset</a></li>
     <li><a href="/gates">Gates</a></li>
     <li><a href="/disagree">Disagree</a></li>
   </ul>
@@ -293,7 +294,7 @@ async function loadDashboard() {
   }).join('');
   document.getElementById('model-bars').innerHTML = barsHtml;
 
-  // Gate summary
+  // Gate summary<
   if (stats.gates_summary) {
     const g = stats.gates_summary;
     document.getElementById('gate-summary').innerHTML = `

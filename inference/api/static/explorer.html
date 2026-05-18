@@ -179,6 +179,7 @@
   <ul class="nav-links">
     <li><a href="/">Overview</a></li>
     <li><a href="/explorer" class="active">Explorer</a></li>
+    <li><a href="/train">Train Dataset</a></li>
     <li><a href="/gates">Gates</a></li>
     <li><a href="/disagree">Disagree</a></li>
   </ul>
@@ -187,7 +188,8 @@
 <div class="page">
   <div class="page-header">
     <h1 class="page-title">Prediction <em>Explorer</em></h1>
-    <p class="page-subtitle">Browse all 1,053 test memes with model predictions. Click any meme for details.</p>
+    <p class="page-subtitle" id="page-subtitle"> Browse test memes with model predictions. Click any meme for details.
+</p>
   </div>
 
   <!-- Filters -->
@@ -247,6 +249,14 @@ let availableModels = [];
 
 // ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
+  const stats = await fetchJSON('/api/stats');
+
+  if (stats && stats.total_memes !== undefined) {
+    const totalFormatted = stats.total_memes.toLocaleString('en-US');
+    document.getElementById('page-subtitle').textContent =
+      `Browse all ${totalFormatted} test memes with model predictions. Click any meme for details.`;
+  }
+
   const modelsData = await fetchJSON('/api/models');
   if (modelsData) {
     availableModels = modelsData.models;
@@ -257,6 +267,7 @@ async function init() {
       sel.innerHTML += `<option value="${m}">${labels[m] || m}</option>`;
     });
   }
+
   loadMemes();
 }
 
