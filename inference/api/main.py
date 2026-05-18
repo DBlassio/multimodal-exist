@@ -21,9 +21,11 @@ from data_loader import DataLoader
 # ── Paths (relative to project root, adjust if needed) ──────────────────────
 
 #Paths
-PRED_DIR    = Path("../../inference/predictions")
-IMG_DIR     = Path("../../data/memes/test/memes")
+PRED_DIR = Path("../../inference/predictions")
+TEST_IMG_DIR   = Path("../../data/memes/test/memes")
+TRAIN_IMG_DIR   = Path("../../data/memes/train/memes")
 TEST_PARQUET = Path("../../data/processed/test_model_ready.parquet")
+TRAIN_PARQUET = Path("../../data/processed/train_base.parquet")
 STATIC_DIR  = Path("static")
 
 dl: DataLoader = None
@@ -33,10 +35,11 @@ async def lifespan(app: FastAPI):
     global dl
 
     #Load Prediction Data
-    print("Loading prediction data...")
-    dl = DataLoader(pred_dir=PRED_DIR,test_parquet=TEST_PARQUET)
+    print("Loading train and prediction data...")
+    dl = DataLoader(pred_dir=PRED_DIR,test_parquet=TEST_PARQUET,train_parquet=TRAIN_PARQUET)
 
-    print(f"    {len(dl.df)} memes loaded")
+    print(f"    {len(dl.train_df)} train loaded")
+    print(f"    {len(dl.df)} predictions loaded")
     print(f"    Models: {dl.available_models}")
     yield
     print("Shutting down.")
@@ -60,6 +63,10 @@ async def home():
 async def explorer():
     return FileResponse(STATIC_DIR / "explorer.html")
 
+@app.get("/train", include_in_schema=False)
+async def train_page():
+    return FileResponse(STATIC_DIR / "train.html")
+
 @app.get("/gates", include_in_schema=False)
 async def gates_page():
     return FileResponse(STATIC_DIR / "gates.html")
@@ -72,11 +79,12 @@ async def disagree_page():
 #Images Serving
 @app.get("/images/{filename}", include_in_schema=False)
 async def serve_image(filename: str):
-    path = IMG_DIR / filename
-    if not path.exists():
-        # Return placeholder if image not found
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(path)
+    for img_dir in [TEST_IMG_DIR, TRAIN_IMG_DIR]:
+        path = img_dir / filename
+        if path.exists():
+            return FileResponse(path)
+
+    raise HTTPException(status_code=404, detail="Image not found")
 
 
 # API Endpoints
@@ -90,8 +98,45 @@ async def get_stats():
     """
     return JSONResponse(dl.get_stats())
 
+#Train stats
+@app.get("/api/train/stats")
+async def train_stats():
+    return JSONResponse(dl.get_train_stats())
 
-# Get Memes and Description
+
+@app.get("/api/train/memes")
+async def train_memes(
+    page: int = 1,
+    page_size: int = 24,
+    lang: Optional[str] = None,
+    min_task21_soft: Optional[float] = 0,
+    min_task22_soft: Optional[float] = 0,
+    category: Optional[str] = None,
+    search: Optional[str] = None):
+
+    return JSONResponse(dl.get_train_memes(
+        page=page,
+        page_size=page_size,
+        lang=lang,
+        min_task21_soft=min_task21_soft,
+        min_task22_soft=min_task22_soft,
+        category=category,
+        search=search))
+
+
+@app.get("/api/train/memes/{meme_id}")
+async def train_meme_detail(meme_id: str):
+    detail = dl.get_train_meme_detail(meme_id)
+
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Training meme not found")
+
+    return detail
+
+
+# Prediction Dataset
+
+#Get memes
 @app.get("/api/memes")
 async def get_memes(
     page:int = Query(1,    ge=1),

@@ -41,11 +41,17 @@ MODEL_LABELS = {
 
 #DataLoader ---------------------------------------------------------------------------------------
 class DataLoader:
-    def __init__(self, pred_dir: Path, test_parquet: Path):
-
+    def __init__(self, pred_dir: Path, test_parquet: Path, train_parquet: Path):
+        
+        #We set paths
         self.pred_dir = Path(pred_dir)
 
-        # Data
+        # Train metadata
+        self.train_df = None
+        if train_parquet is not None and Path(train_parquet).exists():
+            self.train_df = self._load_train_df(Path(train_parquet))
+
+        # Test Data
         meta = pd.read_parquet(test_parquet)[["id", "lang", "text", "image_file"]]
         meta["id"] = meta["id"].astype(str)
         self.meta = meta.set_index("id")
@@ -81,6 +87,86 @@ class DataLoader:
     
     
     # Helpers and Functions --------------------------------------------------------------
+    def _safe_float(self, x, default: float = 0.0) -> float:
+        """
+        Convert a value to float safely.
+        NaN values become 0.0 by default.
+        """
+        try:
+            if pd.isna(x):
+                return default
+            return float(x)
+        except Exception:
+            return default
+
+
+    def _normalize_task23_soft(self, x) -> dict:
+        """
+        Normalize task23_soft into a complete category distribution.
+
+        Expected output:
+        {
+            "IDEOLOGICAL-INEQUALITY": 0.1667,
+            "MISOGYNY-NON-SEXUAL-VIOLENCE": 0.5,
+            "OBJECTIFICATION": 0.6667,
+            "SEXUAL-VIOLENCE": 0.0,
+            "STEREOTYPING-DOMINANCE": 0.1667
+        }
+
+        If value is NaN, return all categories with 0.0.
+        """
+
+        categories = [
+            "IDEOLOGICAL-INEQUALITY",
+            "MISOGYNY-NON-SEXUAL-VIOLENCE",
+            "OBJECTIFICATION",
+            "SEXUAL-VIOLENCE",
+            "STEREOTYPING-DOMINANCE",
+        ]
+
+        empty_dist = {cat: 0.0 for cat in categories}
+
+        if isinstance(x, dict):
+            return {
+                cat: round(self._safe_float(x.get(cat, 0.0)), 4)
+                for cat in categories
+            }
+
+        if pd.isna(x):
+            return empty_dist
+
+        # In case parquet stores the dict as a string.
+        if isinstance(x, str):
+            import ast
+            try:
+                parsed = ast.literal_eval(x)
+                if isinstance(parsed, dict):
+                    return {
+                        cat: round(self._safe_float(parsed.get(cat, 0.0)), 4)
+                        for cat in categories
+                    }
+            except Exception:
+                return empty_dist
+
+        return empty_dist
+    
+    def _load_train_df(self, train_parquet: Path) -> pd.DataFrame:
+        df = pd.read_parquet(train_parquet).copy()
+
+        out = pd.DataFrame({
+            "id": df["id"].astype(str),
+            "lang": df["lang"].astype(str).str.lower(),
+            "text": df["text"].astype(str),
+            "image_file": df["image_file"].astype(str),
+
+            # Soft human annotation agreement
+            "task21_soft": df["task21_soft"].apply(self._safe_float),
+            "task22_soft": df["task22_soft"].apply(self._safe_float),
+            "task23_soft": df["task23_soft"].apply(self._normalize_task23_soft),
+        })
+
+        return out
+
 
     #Calculate our calibrated t23 thresholds
     def _calibrate_t23(self, model: str) -> dict:
@@ -142,6 +228,165 @@ class DataLoader:
         return df.reset_index()
 
     # API Methods ----------------------------------------------------------------
+    def get_train_stats(self) -> dict:
+        """
+        Summary statistics for the Train Dataset page.
+        """
+
+        if self.train_df is None:
+            return {
+                "total_memes": 0,
+                "lang_distribution": {},
+                "avg_task21_soft": 0.0,
+                "avg_task22_soft": 0.0,
+                "avg_task23_soft": {},
+            }
+
+        df = self.train_df
+
+        # Average category distribution across the training dataset
+        category_sums = {}
+
+        for dist in df["task23_soft"]:
+            for category, value in dist.items():
+                category_sums[category] = category_sums.get(category, 0.0) + float(value)
+
+        avg_task23_soft = {
+            category: round(value / len(df), 4)
+            for category, value in category_sums.items()
+        }
+
+        return {
+            "total_memes": len(df),
+            "lang_distribution": df["lang"].value_counts().to_dict(),
+
+            # Average annotator agreement
+            "avg_task21_soft": round(float(df["task21_soft"].mean()), 4),
+            "avg_task22_soft": round(float(df["task22_soft"].mean()), 4),
+
+            # Average category distribution
+            "avg_task23_soft": avg_task23_soft,
+        }
+    
+    def get_train_memes(
+        self,
+        page: int,
+        page_size: int,
+        lang: Optional[str] = None,
+        min_task21_soft: Optional[float] = 0,
+        min_task22_soft: Optional[float] = 0,
+        category: Optional[str] = None,
+        search: Optional[str] = None) -> dict:
+        """
+        Filtered, paginated training meme list.
+        """
+
+        if self.train_df is None:
+            return {
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "pages": 1,
+                "memes": [],
+            }
+
+        df = self.train_df.copy()
+
+        if lang:
+            df = df[df["lang"] == lang.lower()]
+
+        if min_task21_soft is not None:
+            df = df[df["task21_soft"] >= float(min_task21_soft)]
+
+        if min_task22_soft is not None:
+            df = df[df["task22_soft"] >= float(min_task22_soft)]
+
+        if category:
+            df = df[df["task23_soft"].apply(
+                lambda dist: float(dist.get(category, 0.0)) > 0.0
+            )]
+
+        if search:
+            df = df[df["text"].str.contains(search, case=False, na=False)]
+
+        total = len(df)
+        start = (page - 1) * page_size
+        page_df = df.iloc[start:start + page_size]
+
+        memes = []
+
+        for _, row in page_df.iterrows():
+            task23_dist = row["task23_soft"]
+
+            if task23_dist:
+                top_category = max(task23_dist, key=task23_dist.get)
+                top_category_score = round(float(task23_dist[top_category]), 4)
+            else:
+                top_category = None
+                top_category_score = 0.0
+
+            meme = {
+                "id": str(row["id"]),
+                "lang": row["lang"],
+                "text": str(row["text"])[:300],
+                "image_file": str(row["image_file"]),
+
+                "task21_soft": round(float(row["task21_soft"]), 4),
+                "task22_soft": round(float(row["task22_soft"]), 4),
+                "task23_soft": task23_dist,
+
+                "top_category": top_category,
+                "top_category_score": top_category_score,
+            }
+
+            memes.append(meme)
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": max(1, -(-total // page_size)),
+            "memes": memes,
+        }
+    
+    def get_train_meme_detail(self, meme_id: str) -> Optional[dict]:
+        """
+        Full detail for one training meme.
+        """
+
+        if self.train_df is None:
+            return None
+
+        row_df = self.train_df[self.train_df["id"] == str(meme_id)]
+
+        if row_df.empty:
+            return None
+
+        row = row_df.iloc[0]
+        task23_dist = row["task23_soft"]
+
+        if task23_dist:
+            top_category = max(task23_dist, key=task23_dist.get)
+            top_category_score = round(float(task23_dist[top_category]), 4)
+        else:
+            top_category = None
+            top_category_score = 0.0
+
+        return {
+            "id": str(row["id"]),
+            "lang": row["lang"],
+            "text": str(row["text"]),
+            "image_file": str(row["image_file"]),
+
+            "annotations": {
+                "task21_soft": round(float(row["task21_soft"]), 4),
+                "task22_soft": round(float(row["task22_soft"]), 4),
+                "task23_soft": task23_dist,
+                "top_category": top_category,
+                "top_category_score": top_category_score,
+            },
+        }
+    
     def get_stats(self) -> dict:
         """Summary statistics for the dashboard."""
         
