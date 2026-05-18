@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explorer — EXIST 2026</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .meme-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .results-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--white-dim);
+      margin-bottom: 1rem;
+    }
+
+    .results-meta span { color: var(--amber); }
+
+    /* Detail panel inside modal */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 600px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+
+    .detail-img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--navy-mid);
+      display: block;
+    }
+
+    .detail-lang {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--white-dim);
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 0.75rem;
+    }
+
+    .detail-text {
+      font-size: 13px;
+      color: var(--white-dim);
+      line-height: 1.65;
+      margin-bottom: 1rem;
+    }
+
+    .task-section { margin-bottom: 1.25rem; }
+
+    .task-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 0.6rem;
+    }
+
+    .prob-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .prob-row:last-child { border-bottom: none; }
+
+    .prob-row-name {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--white-dim);
+      width: 110px;
+      flex-shrink: 0;
+    }
+
+    .prob-track {
+      flex: 1;
+      height: 5px;
+      background: var(--navy);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .prob-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+      transition: width 500ms cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .prob-fill.not {
+      background: linear-gradient(90deg, #3a4a5a, #4a5f75);
+    }
+
+    .prob-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--white);
+      width: 40px;
+      text-align: right;
+    }
+
+    .cat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 0.5rem;
+    }
+
+    .cat-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 9px;
+      border-radius: 5px;
+      background: var(--navy);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .cat-item.active {
+      background: rgba(43,191,164,0.08);
+      border-color: rgba(43,191,164,0.25);
+      color: var(--teal);
+    }
+
+    .cat-name { flex: 1; }
+
+    .cat-prob {
+      color: var(--white-dim);
+      font-size: 10px;
+    }
+
+    .cat-item.active .cat-prob { color: var(--teal); }
+
+    .gates-mini {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .gates-mini-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 0.6rem;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-brand">
+    <div class="nav-brand-dot"></div>
+    <span class="nav-brand-text">EXIST 2026</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="/">Overview</a></li>
+    <li><a href="/explorer" class="active">Explorer</a></li>
+    <li><a href="/gates">Gates</a></li>
+    <li><a href="/disagree">Disagree</a></li>
+  </ul>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <h1 class="page-title">Prediction <em>Explorer</em></h1>
+    <p class="page-subtitle">Browse all 1,053 test memes with model predictions. Click any meme for details.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <input  id="f-search"     class="filter-input"  type="text"    placeholder="Search text…">
+    <select id="f-lang"       class="filter-select">
+      <option value="">All languages</option>
+      <option value="es">Spanish</option>
+      <option value="en">English</option>
+    </select>
+    <select id="f-prediction" class="filter-select">
+      <option value="">All predictions</option>
+      <option value="sexist">Sexist</option>
+      <option value="not_sexist">Not Sexist</option>
+    </select>
+    <select id="f-model" class="filter-select">
+      <option value="">Filter by model</option>
+    </select>
+    <button id="f-reset" class="page-btn">Reset</button>
+  </div>
+
+  <!-- Results meta -->
+  <div class="results-meta" id="results-meta">Loading…</div>
+
+  <!-- Meme grid -->
+  <div class="meme-grid" id="meme-grid">
+    <div class="loading" style="grid-column:1/-1;">
+      <div class="spinner"></div> Loading memes…
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--white-dim);margin-bottom:4px;">MEME DETAIL</div>
+        <div id="modal-id" style="font-family:var(--font-mono);font-size:14px;color:var(--white);">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let state = { page: 1, pageSize: 24, lang: '', prediction: '', model: '', search: '' };
+let searchTimer = null;
+let availableModels = [];
+
+// ── Init ──────────────────────────────────────────────────────────────────
+async function init() {
+  const modelsData = await fetchJSON('/api/models');
+  if (modelsData) {
+    availableModels = modelsData.models;
+    const sel = document.getElementById('f-model');
+    availableModels.forEach(m => {
+      const labels = { baseline:'Early Fusion', gated:'Gated Fusion',
+                       cross_attention:'Cross-Attention', ensemble:'Ensemble' };
+      sel.innerHTML += `<option value="${m}">${labels[m] || m}</option>`;
+    });
+  }
+  loadMemes();
+}
+
+// ── Load memes ────────────────────────────────────────────────────────────
+async function loadMemes() {
+  const grid = document.getElementById('meme-grid');
+  grid.innerHTML = '<div class="loading" style="grid-column:1/-1;"><div class="spinner"></div> Loading…</div>';
+  document.getElementById('results-meta').textContent = '…';
+
+  const params = new URLSearchParams({
+    page:      state.page,
+    page_size: state.pageSize,
+    ...(state.lang       && { lang:       state.lang }),
+    ...(state.prediction && { prediction: state.prediction }),
+    ...(state.model      && { model:      state.model }),
+    ...(state.search     && { search:     state.search }),
+  });
+
+  const data = await fetchJSON(`/api/memes?${params}`);
+  if (!data) {
+    grid.innerHTML = '<div class="error-msg" style="grid-column:1/-1;">Failed to load memes.</div>';
+    return;
+  }
+
+  document.getElementById('results-meta').innerHTML =
+    `Showing <span>${(state.page-1)*state.pageSize+1}–${Math.min(state.page*state.pageSize, data.total)}</span> of <span>${data.total}</span> memes`;
+
+  renderGrid(data.memes);
+  renderPagination(data.page, data.pages);
+}
+
+// ── Render grid ───────────────────────────────────────────────────────────
+function renderGrid(memes) {
+  const grid = document.getElementById('meme-grid');
+  if (!memes.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;color:var(--white-dim);padding:3rem;text-align:center;font-size:14px;">No memes match the current filters.</div>';
+    return;
+  }
+
+  grid.innerHTML = memes.map(meme => {
+    const labels = { baseline:'EF', gated:'GF', cross_attention:'CA', ensemble:'EN' };
+    const badges = Object.entries(meme.predictions).map(([m, p]) => {
+      const cls = p.pred21 === 'SEXIST' ? 'sexist' : 'not';
+      const short = labels[m] || m;
+      return `<span class="badge badge-${cls}" title="${p.label}: ${(p.p21*100).toFixed(1)}%">${short}</span>`;
+    }).join('');
+
+    const agreeClass = meme.models_agree ? '' : 'style="border-color:rgba(232,88,88,0.3)"';
+
+    return `
+      <div class="meme-card" ${agreeClass} onclick="openMemeDetail('${meme.id}')">
+        <img src="/images/${encodeURIComponent(meme.image_file)}"
+             alt="Meme ${meme.id}"
+             loading="lazy"
+             onerror="this.style.display='none'">
+        <div class="meme-card-body">
+          <div class="meme-card-text">${meme.text || '—'}</div>
+          <div class="meme-card-models">${badges}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────
+function renderPagination(current, total) {
+  const nav = document.getElementById('pagination');
+  if (total <= 1) { nav.innerHTML = ''; return; }
+
+  const pages = [];
+  pages.push(`<button class="page-btn" ${current===1?'disabled':''} onclick="goPage(${current-1})">‹</button>`);
+
+  const range = pageRange(current, total);
+  range.forEach(p => {
+    if (p === '…') {
+      pages.push(`<span style="color:var(--white-dim);padding:0 4px;">…</span>`);
+    } else {
+      pages.push(`<button class="page-btn ${p===current?'active':''}" onclick="goPage(${p})">${p}</button>`);
+    }
+  });
+
+  pages.push(`<button class="page-btn" ${current===total?'disabled':''} onclick="goPage(${current+1})">›</button>`);
+  nav.innerHTML = pages.join('');
+}
+
+function pageRange(current, total) {
+  if (total <= 7) return Array.from({length: total}, (_, i) => i+1);
+  const pages = [1];
+  if (current > 3) pages.push('…');
+  for (let p = Math.max(2, current-1); p <= Math.min(total-1, current+1); p++) pages.push(p);
+  if (current < total-2) pages.push('…');
+  pages.push(total);
+  return pages;
+}
+
+function goPage(p) {
+  state.page = p;
+  loadMemes();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Open meme detail ──────────────────────────────────────────────────────
+function openMemeDetail(id) {
+  document.getElementById('modal-id').textContent = `ID: ${id}`;
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderModalContent(id);
+}
+
+async function renderModalContent(memeId) {
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+
+  const data = await fetchJSON(`/api/memes/${memeId}`);
+  if (!data) {
+    body.innerHTML = '<div class="error-msg">Failed to load details.</div>';
+    return;
+  }
+
+  const preds = data.predictions;
+  const models = Object.keys(preds);
+
+  // Task 2.1 probability rows
+  const task21Rows = models.map(m => {
+    const p = preds[m];
+    const isSexist = p.pred21 === 'SEXIST';
+    return `
+      <div class="prob-row">
+        <div class="prob-row-name">${p.label}</div>
+        <div class="prob-track">
+          <div class="prob-fill ${isSexist ? '' : 'not'}" style="width:${(p.p21*100).toFixed(1)}%"></div>
+        </div>
+        <div class="prob-num">${(p.p21*100).toFixed(0)}%</div>
+        ${p.pred21 === 'SEXIST'
+          ? `<span class="badge badge-sexist">SEXIST</span>`
+          : `<span class="badge badge-not">NOT</span>`}
+      </div>`;
+  }).join('');
+
+  // Task 2.2
+  const task22Rows = models.map(m => {
+    const p = preds[m];
+    const label = p.pred22;
+    const cls = label === 'DIRECT' ? 'direct' : label === 'JUDGEMENTAL' ? 'judg' : 'not';
+    return `
+      <div class="prob-row">
+        <div class="prob-row-name">${p.label}</div>
+        <span class="badge badge-${cls}">${label}</span>
+        <div style="margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--white-dim);">
+          D:${(p.p22_direct*100).toFixed(0)}% / J:${(p.p22_judg*100).toFixed(0)}%
+        </div>
+      </div>`;
+  }).join('');
+
+  // Task 2.3 categories — use first model's cat_probs
+  const firstModel = models[0];
+  const catProbs = preds[firstModel]?.cat_probs || {};
+  const SHORT = {
+    'IDEOLOGICAL-INEQUALITY':       'Ideological',
+    'MISOGYNY-NON-SEXUAL-VIOLENCE': 'Misogyny',
+    'OBJECTIFICATION':              'Objectification',
+    'SEXUAL-VIOLENCE':              'Sexual Violence',
+    'STEREOTYPING-DOMINANCE':       'Stereotyping',
+  };
+  const catItems = Object.entries(catProbs).map(([label, prob]) => {
+    const active = prob >= 0.3;
+    return `
+      <div class="cat-item ${active ? 'active' : ''}">
+        <span class="cat-name">${SHORT[label] || label}</span>
+        <span class="cat-prob">${(prob*100).toFixed(0)}%</span>
+      </div>`;
+  }).join('');
+
+  // Gates
+  const gatesHtml = data.gates ? `
+    <div class="gates-mini">
+      <div class="gates-mini-title">Gated model gates</div>
+      ${gateBar('β Image', data.gates.beta, 'beta')}
+      ${gateBar('α EEG', data.gates.alpha, 'alpha')}
+      ${gateBar('λ Eye-T', data.gates.lambda, 'lambda')}
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="detail-grid">
+      <div>
+        <img src="/images/${encodeURIComponent(data.image_file)}"
+             class="detail-img"
+             onerror="this.style.minHeight='140px';this.style.background='var(--navy-mid)';">
+        ${gatesHtml}
+      </div>
+      <div>
+        <span class="detail-lang">${data.lang.toUpperCase()} · ${data.models_agree_21 ? '✓ Agree' : '✗ Disagree'}</span>
+        <p class="detail-text">${data.text || '—'}</p>
+
+        <div class="task-section">
+          <div class="task-label">Task 2.1 — Sexism detection</div>
+          ${task21Rows}
+        </div>
+
+        <div class="task-section">
+          <div class="task-label">Task 2.2 — Source intention</div>
+          ${task22Rows}
+        </div>
+
+        <div class="task-section">
+          <div class="task-label">Task 2.3 — Categories (${preds[firstModel]?.label || ''})</div>
+          <div class="cat-grid">${catItems}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Filter events ─────────────────────────────────────────────────────────
+document.getElementById('f-lang').addEventListener('change', e => {
+  state.lang = e.target.value; state.page = 1; loadMemes();
+});
+document.getElementById('f-prediction').addEventListener('change', e => {
+  state.prediction = e.target.value; state.page = 1; loadMemes();
+});
+document.getElementById('f-model').addEventListener('change', e => {
+  state.model = e.target.value; state.page = 1; loadMemes();
+});
+document.getElementById('f-search').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.search = e.target.value.trim(); state.page = 1; loadMemes();
+  }, 400);
+});
+document.getElementById('f-reset').addEventListener('click', () => {
+  state = { ...state, page:1, lang:'', prediction:'', model:'', search:'' };
+  document.getElementById('f-lang').value = '';
+  document.getElementById('f-prediction').value = '';
+  document.getElementById('f-model').value = '';
+  document.getElementById('f-search').value = '';
+  loadMemes();
+});
+
+// ── Modal close ───────────────────────────────────────────────────────────
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target.id === 'modal-overlay') closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+init();
+</script>
+</body>
+</html>
