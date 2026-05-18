@@ -105,11 +105,10 @@ class DataLoader:
     def _hard_23(self, p21: float, row: pd.Series, t23: dict) -> list:
         if p21 < T21:
             return ["NO"]
-        #Extract labels were the threshold was surprassed 
-        active = [label for label, col in CAT_COLS.items() if float(row.get(col, 0)) >= t23.get(col, 0.5)]
-        #If not, set the label with the highest value
+        active = [label for label, col in CAT_COLS.items()
+                if float(row.get(col, 0.0)) >= t23.get(col, 0.5)]
         if not active:
-            best_col = max(CAT_COLS.values(), key=lambda c: float(row.get(c, 0)))
+            best_col = max(CAT_COLS.values(), key=lambda c: float(row.get(c, 0.0)))
             best_label = [l for l, c in CAT_COLS.items() if c == best_col][0]
             active = [best_label]
         return active
@@ -175,10 +174,9 @@ class DataLoader:
         # Gate summary
         if self.gates is not None:
             stats["gates_summary"] = {
-                "β-mean (Image weight)": round(float(self.gates["gate_beta"].mean()),3),
-                "α-mean (EEG weight)": round(float(self.gates["gate_alpha"].mean()),3),
-                "λ-mean (ET weight)": round(float(self.gates["gate_lambda"].mean()),3),
-            }
+            "beta_mean": round(float(self.gates["gate_beta"].mean()), 3),
+            "alpha_mean": round(float(self.gates["gate_alpha"].mean()), 3),
+            "lambda_mean": round(float(self.gates["gate_lambda"].mean()), 3)}
 
         return stats
 
@@ -266,7 +264,13 @@ class DataLoader:
             pred22 = self._hard_22(p21, p_d, p_j)
 
             cat_probs = {label: round(float(row[f"{model}_{col}"]), 4) for label, col in CAT_COLS.items()}
-            pred23 = self._hard_23(p21, row.rename({f"{model}_{col}": col for col in CAT_COLS.values()}),self.t23)
+            
+            # Construir una mini-series solo con las columnas de categorías
+            cat_series = pd.Series({col: float(row.get(f"{model}_{col}", 0.0)) for col in CAT_COLS.values()})
+            pred23 = self._hard_23(p21, cat_series, self.t23)
+            
+            
+            #pred23 = self._hard_23(p21, row.rename({f"{model}_{col}": col for col in CAT_COLS.values()}),self.t23)
 
             detail["predictions"][model] = {
                 "label":MODEL_LABELS.get(model, model),
@@ -282,9 +286,10 @@ class DataLoader:
         if self.gates is not None and meme_id in self.gates.index:
             g = self.gates.loc[meme_id]
             detail["gates"] = {
-                "β (Image weight)": round(float(g["gate_beta"]),4),
-                "α (EEG weight)": round(float(g["gate_alpha"]),4),
-                "λ (ET weight)": round(float(g["gate_lambda"]),4)}
+                "beta": round(float(g["gate_beta"]), 4),      # Image
+                "alpha": round(float(g["gate_alpha"]), 4),    # EEG
+                "lambda": round(float(g["gate_lambda"]), 4),  # Eye-tracking
+            }
             
         return detail
 
