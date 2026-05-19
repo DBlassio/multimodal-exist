@@ -187,6 +187,16 @@ async def get_disagreements(
     results = dl.get_disagreements(page=page, page_size=page_size, task=task)
     return JSONResponse(results)
 
+#Gates Endpoint
+@app.get("/api/gates")
+async def get_gates(
+    page:      int = Query(1,      ge=1),
+    page_size: int = Query(24,     ge=1, le=100),
+    sort_by:   str = Query("beta", description="beta | alpha | lambda"),
+):
+    """Gate values per meme with distribution histograms. Used by: gates.html"""
+    return JSONResponse(dl.get_gates_data(page=page, page_size=page_size, sort_by=sort_by))
+
 #List of Models available 
 @app.get("/api/models")
 async def get_models():

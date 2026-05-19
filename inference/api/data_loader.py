@@ -387,6 +387,82 @@ class DataLoader:
             },
         }
     
+    def get_gates_data(self, page: int, page_size: int,
+                       sort_by: str = "beta") -> dict:
+        """
+        Paginated meme list sorted by gate value, plus distribution histograms.
+        Used by: gates.html
+        """
+        if self.gates is None:
+            return {
+                "total": 0, "page": page, "page_size": page_size,
+                "pages": 1, "memes": [], "distribution": {}
+            }
+
+        # Join gates with metadata
+        df = self.gates.join(self.meta[["lang", "text", "image_file"]])
+        df = df.reset_index()
+
+        # Sort by selected gate
+        col_map = {
+            "beta":   "gate_beta",
+            "alpha":  "gate_alpha",
+            "lambda": "gate_lambda",
+        }
+        sort_col = col_map.get(sort_by, "gate_beta")
+        df = df.sort_values(sort_col, ascending=False)
+
+        total    = len(df)
+        page_df  = df.iloc[(page - 1) * page_size : page * page_size]
+
+        # Gated predictions for p21
+        gated = self.preds.get("gated")
+
+        memes = []
+        for _, row in page_df.iterrows():
+            mid = str(row["id"])
+            p21 = 0.0
+            if gated is not None and mid in gated.index:
+                p21 = round(float(gated.loc[mid, "p21"]), 4)
+
+            memes.append({
+                "id":          mid,
+                "lang":        row["lang"],
+                "text":        str(row["text"])[:200],
+                "image_file":  str(row["image_file"]),
+                "gate_beta":   round(float(row["gate_beta"]),   4),
+                "gate_alpha":  round(float(row["gate_alpha"]),  4),
+                "gate_lambda": round(float(row["gate_lambda"]), 4),
+                "p21":         p21,
+            })
+
+        # Distribution histograms (all 1053 values, not paginated)
+        distribution = {}
+        for col, key in [
+            ("gate_beta",   "beta"),
+            ("gate_alpha",  "alpha"),
+            ("gate_lambda", "lambda"),
+        ]:
+            vals  = self.gates[col].dropna().values
+            hist, edges = np.histogram(vals, bins=20, range=(0.0, 1.0))
+            distribution[key] = {
+                "counts": hist.tolist(),
+                "edges":  [round(float(e), 3) for e in edges.tolist()],
+                "mean":   round(float(np.mean(vals)), 4),
+                "median": round(float(np.median(vals)), 4),
+                "std":    round(float(np.std(vals)), 4),
+            }
+
+        return {
+            "total":        total,
+            "page":         page,
+            "page_size":    page_size,
+            "pages":        max(1, -(-total // page_size)),
+            "sort_by":      sort_by,
+            "memes":        memes,
+            "distribution": distribution,
+        }
+    
     def get_stats(self) -> dict:
         """Summary statistics for the dashboard."""
         
