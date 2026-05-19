@@ -63,10 +63,6 @@ async def home():
 async def explorer():
     return FileResponse(STATIC_DIR / "explorer.html")
 
-@app.get("/train", include_in_schema=False)
-async def train_page():
-    return FileResponse(STATIC_DIR / "train.html")
-
 @app.get("/gates", include_in_schema=False)
 async def gates_page():
     return FileResponse(STATIC_DIR / "gates.html")
@@ -74,6 +70,10 @@ async def gates_page():
 @app.get("/disagree", include_in_schema=False)
 async def disagree_page():
     return FileResponse(STATIC_DIR / "disagree.html")
+
+@app.get("/train", include_in_schema=False)
+async def train_page():
+    return FileResponse(STATIC_DIR / "train.html")
 
 
 #Images Serving
