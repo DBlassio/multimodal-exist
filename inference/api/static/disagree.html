@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disagreements — EXIST 2026</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .disagree-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .disagree-row {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red-soft);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      display: grid;
+      grid-template-columns: 80px 1fr auto;
+      gap: 1.25rem;
+      align-items: center;
+      cursor: pointer;
+      transition: border-color var(--transition), transform var(--transition);
+    }
+
+    .disagree-row:hover {
+      border-color: rgba(232,88,88,0.5);
+      border-left-color: var(--red-soft);
+      transform: translateX(3px);
+    }
+
+    .disagree-thumb {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: var(--radius);
+      background: var(--navy-mid);
+      display: block;
+      flex-shrink: 0;
+    }
+
+    .disagree-info { min-width: 0; }
+
+    .disagree-text {
+      font-size: 13px;
+      color: var(--white-dim);
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.5rem;
+    }
+
+    .disagree-models {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .model-pred {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--white-dim);
+    }
+
+    .model-pred-name { color: var(--white-dim); }
+
+    .model-pred-val {
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    .model-pred-val.sexist    { background: rgba(232,168,56,0.15); color: var(--amber); }
+    .model-pred-val.not       { background: rgba(189,185,175,0.1); color: var(--white-dim); }
+
+    .disagree-score-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .score-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--white-dim);
+    }
+
+    .score-value {
+      font-family: var(--font-mono);
+      font-size: 1.4rem;
+      font-weight: 500;
+      color: var(--red-soft);
+      line-height: 1;
+    }
+
+    .score-bar-mini {
+      width: 60px;
+      height: 4px;
+      background: var(--navy);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .score-bar-mini-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #b84040, var(--red-soft));
+    }
+
+    /* Summary cards */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 700px) {
+      .summary-grid { grid-template-columns: 1fr; }
+      .disagree-row { grid-template-columns: 60px 1fr; }
+      .disagree-score-col { display: none; }
+    }
+
+    .results-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--white-dim);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .results-meta span { color: var(--red-soft); }
+
+    /* Task filter tabs */
+    .task-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 1.5rem;
+    }
+
+    .task-tab {
+      background: var(--navy-mid);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--white-dim);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .task-tab:hover { color: var(--white); border-color: rgba(244,241,235,0.2); }
+
+    .task-tab.active {
+      border-color: var(--red-soft);
+      color: var(--red-soft);
+      background: rgba(232,88,88,0.08);
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-brand">
+    <div class="nav-brand-dot"></div>
+    <span class="nav-brand-text">EXIST 2026</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="/">Overview</a></li>
+    <li><a href="/explorer">Explorer</a></li>
+    <li><a href="/gates">Gates</a></li>
+    <li><a href="/disagree" class="active">Disagree</a></li>
+    <li><a href="/train">Train Dataset</a></li>
+  </ul>
+</nav>
+
+<div class="page">
+
+  <div class="page-header">
+    <h1 class="page-title">Model <em>Disagreements</em></h1>
+    <p class="page-subtitle">
+      Memes where the models don't agree on Task 2.1, sorted by disagreement score. High score = high uncertainty.
+    </p>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-grid" id="summary-cards">
+    <div class="card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="card"></div>
+    <div class="card"></div>
+  </div>
+
+  <!-- Task tabs -->
+  <div class="task-tabs">
+    <button class="task-tab active" onclick="setTask('2.1')">Task 2.1 — Sexism</button>
+  </div>
+
+  <!-- Results meta -->
+  <div class="results-meta">
+    <div id="results-meta">Loading…</div>
+  </div>
+
+  <!-- Disagree list -->
+  <div class="disagree-grid" id="disagree-grid">
+    <div class="loading"><div class="spinner"></div> Loading…</div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--white-dim);margin-bottom:4px;">MEME DETAIL</div>
+        <div id="modal-id" style="font-family:var(--font-mono);font-size:14px;color:var(--white);">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let state = { page: 1, pageSize: 20, task: '2.1' };
+
+const MODEL_SHORT = {
+  baseline:       'Early Fusion',
+  gated:          'Gated',
+  cross_attention:'CrossAttn',
+  ensemble:       'Ensemble',
+};
+
+// ── Load summary ──────────────────────────────────────────────────────────
+async function loadSummary() {
+  const stats = await fetchJSON('/api/stats');
+  if (!stats) return;
+
+  const total     = stats.total_memes;
+  const agreeRate = stats.agreement_rate_21;
+  const disagreeN = Math.round(total * (1 - agreeRate));
+
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card">
+      <div class="card-label">Total disagreements</div>
+      <div class="card-value" style="color:var(--red-soft);">${disagreeN.toLocaleString()}</div>
+      <div class="card-desc">of ${total.toLocaleString()} test memes</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Agreement rate</div>
+      <div class="card-value teal">${(agreeRate * 100).toFixed(1)}%</div>
+      <div class="card-desc">Models agree on Task 2.1</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Disagreement rate</div>
+      <div class="card-value" style="color:var(--red-soft);">${((1 - agreeRate) * 100).toFixed(1)}%</div>
+      <div class="card-desc">Ambiguous or hard memes</div>
+    </div>
+  `;
+}
+
+// ── Load disagreements ────────────────────────────────────────────────────
+async function loadDisagreements() {
+  const grid = document.getElementById('disagree-grid');
+  grid.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+
+  const params = new URLSearchParams({
+    page:      state.page,
+    page_size: state.pageSize,
+    task:      state.task,
+  });
+
+  const data = await fetchJSON(`/api/disagreements?${params}`);
+  if (!data) {
+    grid.innerHTML = '<div class="error-msg">Failed to load disagreements.</div>';
+    return;
+  }
+
+  const from = (state.page - 1) * state.pageSize + 1;
+  const to   = Math.min(state.page * state.pageSize, data.total);
+  document.getElementById('results-meta').innerHTML =
+    `Showing <span>${from}–${to}</span> of <span>${data.total}</span> disagreements`;
+
+  renderList(data.memes);
+  renderPagination(data.page, data.pages);
+}
+
+// ── Render list ───────────────────────────────────────────────────────────
+function renderList(memes) {
+  const grid = document.getElementById('disagree-grid');
+  if (!memes.length) {
+    grid.innerHTML = '<div style="color:var(--white-dim);padding:3rem;text-align:center;">No disagreements found.</div>';
+    return;
+  }
+
+  // Max score for normalizing the bar
+  const maxScore = memes[0]?.disagree_score || 1;
+
+  grid.innerHTML = memes.map(m => {
+    const scorePct = ((m.disagree_score / maxScore) * 100).toFixed(0);
+    const scoreDisp = (m.disagree_score * 100).toFixed(1);
+
+    // Per-model prediction pills
+    const modelPills = Object.entries(m.predictions).map(([key, p]) => {
+      const isSexist = p.pred21 === 'SEXIST';
+      return `
+        <span class="model-pred">
+          <span class="model-pred-name">${MODEL_SHORT[key] || key}:</span>
+          <span class="model-pred-val ${isSexist ? 'sexist' : 'not'}">
+            ${isSexist ? 'SEXIST' : 'NOT'} ${(p.p21 * 100).toFixed(0)}%
+          </span>
+        </span>`;
+    }).join('');
+
+    return `
+      <div class="disagree-row" onclick="openDisagreeDetail('${m.id}')">
+        <img class="disagree-thumb"
+             src="/images/${encodeURIComponent(m.image_file)}"
+             loading="lazy"
+             onerror="this.style.background='var(--navy-mid)';">
+        <div class="disagree-info">
+          <div class="disagree-text">${m.text || '—'}</div>
+          <div class="disagree-models">${modelPills}</div>
+        </div>
+        <div class="disagree-score-col">
+          <span class="score-label">Disagree σ</span>
+          <span class="score-value">${scoreDisp}</span>
+          <div class="score-bar-mini">
+            <div class="score-bar-mini-fill" style="width:${scorePct}%"></div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--white-dim);">
+            ${m.lang.toUpperCase()}
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Task tabs ─────────────────────────────────────────────────────────────
+function setTask(task) {
+  state.task = task;
+  state.page = 1;
+  document.querySelectorAll('.task-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.includes(task));
+  });
+  loadDisagreements();
+}
+
+// ── Pagination ─────────────────────────────────────────────────────────────
+function renderPagination(current, total) {
+  const nav = document.getElementById('pagination');
+  if (total <= 1) { nav.innerHTML = ''; return; }
+
+  function pageRange(c, t) {
+    if (t <= 7) return Array.from({length: t}, (_, i) => i + 1);
+    const p = [1];
+    if (c > 3) p.push('…');
+    for (let i = Math.max(2, c-1); i <= Math.min(t-1, c+1); i++) p.push(i);
+    if (c < t-2) p.push('…');
+    p.push(t);
+    return p;
+  }
+
+  const btns = [
+    `<button class="page-btn" ${current===1?'disabled':''} onclick="goPage(${current-1})">‹</button>`,
+    ...pageRange(current, total).map(p =>
+      p === '…'
+        ? `<span style="color:var(--white-dim);padding:0 4px;">…</span>`
+        : `<button class="page-btn ${p===current?'active':''}" onclick="goPage(${p})">${p}</button>`),
+    `<button class="page-btn" ${current===total?'disabled':''} onclick="goPage(${current+1})">›</button>`,
+  ];
+  nav.innerHTML = btns.join('');
+}
+
+function goPage(p) {
+  state.page = p;
+  loadDisagreements();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Detail modal ──────────────────────────────────────────────────────────
+function openDisagreeDetail(id) {
+  document.getElementById('modal-id').textContent = `ID: ${id}`;
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadModalContent(id);   // reuse from app.js
+}
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target.id === 'modal-overlay') closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadSummary();
+loadDisagreements();
+</script>
+</body>
+</html>
