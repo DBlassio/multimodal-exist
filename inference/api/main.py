@@ -15,18 +15,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import os
-
+from mangum import Mangum
 from data_loader import DataLoader
 
-# ── Paths (relative to project root, adjust if needed) ──────────────────────
-
-#Paths
-PRED_DIR = Path("../../inference/predictions")
-TEST_IMG_DIR   = Path("../../data/memes/test/memes")
-TRAIN_IMG_DIR   = Path("../../data/memes/train/memes")
-TEST_PARQUET = Path("../../data/processed/test_model_ready.parquet")
-TRAIN_PARQUET = Path("../../data/processed/train_base.parquet")
-STATIC_DIR  = Path("static")
+# Paths
+PRED_DIR = Path(os.getenv("PRED_DIR", "../../inference/predictions"))
+TEST_IMG_DIR = Path(os.getenv("TEST_IMG_DIR", "../../data/memes/test/memes"))
+TRAIN_IMG_DIR = Path(os.getenv("TRAIN_IMG_DIR", "../../data/memes/train/memes"))
+TEST_PARQUET = Path(os.getenv("TEST_PARQUET", "../../data/processed/test_model_ready.parquet"))
+TRAIN_PARQUET = Path(os.getenv("TRAIN_PARQUET", "../../data/processed/train_base.parquet"))
+STATIC_DIR = Path(os.getenv("STATIC_DIR", "static"))
 
 dl: DataLoader = None
 
@@ -202,3 +200,7 @@ async def get_gates(
 async def get_models():
     """List of available models."""
     return JSONResponse({"models": dl.available_models})
+
+
+# Lambda Handler for AWS Lambda
+handler = Mangum(app)
