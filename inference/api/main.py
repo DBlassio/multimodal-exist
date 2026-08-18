@@ -15,10 +15,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import os
-from mangum import Mangum
-from data_loader import DataLoader
 
-# Paths
+from data_loader import DataLoader
+from mangum import Mangum
+import boto3
+
+# ── Paths ─────────────────────────────────────────────────────────────────
+# Cada ruta sale de una variable de entorno, con el valor de siempre como
+# default. En local no necesitas exportar nada: cae directo al comportamiento
+# de antes. En Lambda, estas variables se setean en la configuración de la
+# función y apuntan a donde sea que vivan los datos ahí (ej. /tmp tras
+# descargarlos de S3, o una ruta empacada dentro de la imagen del contenedor).
+
+#Paths
 PRED_DIR = Path(os.getenv("PRED_DIR", "../../inference/predictions"))
 TEST_IMG_DIR = Path(os.getenv("TEST_IMG_DIR", "../../data/memes/test/memes"))
 TRAIN_IMG_DIR = Path(os.getenv("TRAIN_IMG_DIR", "../../data/memes/train/memes"))
@@ -26,11 +35,49 @@ TEST_PARQUET = Path(os.getenv("TEST_PARQUET", "../../data/processed/test_model_r
 TRAIN_PARQUET = Path(os.getenv("TRAIN_PARQUET", "../../data/processed/train_base.parquet"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "static"))
 
+# ── Descarga desde S3 (solo si S3_BUCKET está seteado) ──────────────────────
+# En local no seteas S3_BUCKET, así que esta ruta nunca se ejecuta y todo
+# sigue leyendo directo del disco como siempre. En Lambda, S3_BUCKET sí
+# está seteado y estas funciones bajan los parquets a /tmp antes de que
+# DataLoader los lea.
+S3_BUCKET = os.getenv("S3_BUCKET")
+S3_PREDICTIONS_PREFIX = os.getenv("S3_PREDICTIONS_PREFIX", "predictions/")
+S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
+
+# Nombres exactos que data_loader.py espera encontrar en PRED_DIR (ver la
+# lista `for model in ["baseline", "gated", "cross_attention", "ensemble"]`
+# y `gated_gates.parquet` en DataLoader.__init__). Los pedimos por nombre
+# fijo en vez de listar el prefijo — así el role solo necesita s3:GetObject,
+# tal cual quedó configurado en el Paso 3, sin agregar s3:ListBucket.
+PREDICTION_FILES = [
+    "baseline_raw.parquet",
+    "gated_raw.parquet",
+    "cross_attention_raw.parquet",
+    "ensemble_raw.parquet",
+    "gated_gates.parquet",
+]
+
+
+def _download_file_from_s3(bucket: str, key: str, dest_path: Path) -> None:
+    """Descarga un único objeto de S3 a una ruta local exacta."""
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    boto3.client("s3").download_file(bucket, key, str(dest_path))
+
+
 dl: DataLoader = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global dl
+
+    #Download from S3 if configured (Lambda). No-op in local dev.
+    if S3_BUCKET:
+        print(f"Downloading data from s3://{S3_BUCKET} ...")
+        for fname in PREDICTION_FILES:
+            _download_file_from_s3(S3_BUCKET, f"{S3_PREDICTIONS_PREFIX}{fname}", PRED_DIR / fname)
+        _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TEST_PARQUET.name}", TEST_PARQUET)
+        _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TRAIN_PARQUET.name}", TRAIN_PARQUET)
+        print("Download complete.")
 
     #Load Prediction Data
     print("Loading train and prediction data...")
@@ -202,5 +249,9 @@ async def get_models():
     return JSONResponse({"models": dl.available_models})
 
 
-# Lambda Handler for AWS Lambda
+# ── Lambda handler ────────────────────────────────────────────────────────
+# Mangum traduce entre el evento de Lambda (o la Function URL) y el
+# protocolo ASGI que espera FastAPI. En local, uvicorn sigue usando `app`
+# directamente y nunca toca esta línea — este handler solo se invoca
+# cuando el contenedor corre dentro de Lambda.
 handler = Mangum(app)
