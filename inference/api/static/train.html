@@ -591,7 +591,7 @@ function renderGrid(memes) {
 
     return `
       <div class="train-card" onclick="openTrainDetail('${m.id}')">
-        <img src="/images/${encodeURIComponent(m.image_file)}"
+        <img src="${imageUrl(m.image_file, 'train')}"
              alt="${m.id}"
              loading="lazy"
              onerror="this.style.display='none'">
@@ -688,7 +688,7 @@ async function loadTrainModalContent(memeId) {
     body.innerHTML = `
       <div class="detail-grid">
         <div>
-          <img src="/images/${encodeURIComponent(d.image_file)}"
+          <img src="${imageUrl(d.image_file, 'train')}"
                class="detail-img"
                onerror="this.style.minHeight='140px';this.style.background='var(--navy-mid)';">
           <div style="margin-top:0.75rem;padding:0.75rem;background:var(--navy);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-mono);font-size:11px;color:var(--white-dim);line-height:1.8;">

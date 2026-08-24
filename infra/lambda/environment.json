@@ -1,0 +1,8 @@
+{
+  "Variables": {
+    "S3_BUCKET": "multimodal-exist",
+    "PRED_DIR": "/tmp/predictions",
+    "TEST_PARQUET": "/tmp/processed/test_model_ready.parquet",
+    "TRAIN_PARQUET": "/tmp/processed/train_base.parquet"
+  }
+}

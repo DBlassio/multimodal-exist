@@ -472,7 +472,7 @@ function renderGrid(memes) {
 
     return `
       <div class="gate-card" onclick="openModal('${m.id}')">
-        <img src="/images/${encodeURIComponent(m.image_file)}"
+        <img src="${imageUrl(m.image_file, 'test')}"
              loading="lazy"
              onerror="this.style.display='none'">
         <div class="gate-card-body">
@@ -606,7 +606,7 @@ async function loadGateModalContent(memeId) {
 
     body.innerHTML = `
       <div style="display:grid;grid-template-columns:180px 1fr;gap:1.25rem;align-items:start;">
-        <img src="/images/${encodeURIComponent(d.image_file)}"
+        <img src="${imageUrl(d.image_file, 'test')}"
              style="width:100%;border-radius:8px;border:1px solid var(--border);background:var(--navy-mid);"
              onerror="this.style.minHeight='120px';">
         <div>

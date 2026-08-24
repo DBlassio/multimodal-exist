@@ -31,8 +31,10 @@ function agreeBadge(agree) {
 }
 
 // ── Image URL ─────────────────────────────────────────────────────────────
-function imageUrl(filename) {
-  return `/images/${encodeURIComponent(filename)}`;
+const CLOUDFRONT_DOMAIN = 'PENDIENTE_DOMINIO_CLOUDFRONT'; // ej: d123abc456.cloudfront.net
+
+function imageUrl(filename, split = 'test') {
+  return `https://${CLOUDFRONT_DOMAIN}/${split}/${encodeURIComponent(filename)}`;
 }
 
 // ── Gate bar HTML ─────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ const gatesHtml = gates ? `
 
   body.innerHTML = `
     <div style="display:grid;grid-template-columns:200px 1fr;gap:1.5rem;align-items:start;">
-      <img src="${imageUrl(data.image_file)}"
+      <img src="${imageUrl(data.image_file, 'test')}"
            style="width:100%;border-radius:8px;border:1px solid var(--border);"
            onerror="this.src='';this.style.background='var(--navy-mid)';this.style.height='150px';">
       <div>

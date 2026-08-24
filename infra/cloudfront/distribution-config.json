@@ -1,0 +1,34 @@
+{
+  "CallerReference": "multimodal-exist-images-v1",
+  "Comment": "Distribucion de imagenes privadas para el demo multimodal-exist",
+  "Enabled": true,
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "multimodal-exist-s3-images",
+        "DomainName": "multimodal-exist.s3.us-east-1.amazonaws.com",
+        "OriginPath": "/images",
+        "OriginAccessControlId": "E2JMOO12POOY88",
+        "S3OriginConfig": {
+          "OriginAccessIdentity": ""
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "multimodal-exist-s3-images",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"],
+      "CachedMethods": {
+        "Quantity": 2,
+        "Items": ["GET", "HEAD"]
+      }
+    },
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "Compress": true
+  },
+  "PriceClass": "PriceClass_100"
+}
