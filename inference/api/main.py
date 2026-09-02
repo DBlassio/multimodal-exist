@@ -15,17 +15,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import os
-
 from data_loader import DataLoader
 from mangum import Mangum
 import boto3
-
-# ── Paths ─────────────────────────────────────────────────────────────────
-# Cada ruta sale de una variable de entorno, con el valor de siempre como
-# default. En local no necesitas exportar nada: cae directo al comportamiento
-# de antes. En Lambda, estas variables se setean en la configuración de la
-# función y apuntan a donde sea que vivan los datos ahí (ej. /tmp tras
-# descargarlos de S3, o una ruta empacada dentro de la imagen del contenedor).
 
 #Paths
 PRED_DIR = Path(os.getenv("PRED_DIR", "../../inference/predictions"))
@@ -33,31 +25,20 @@ TEST_PARQUET = Path(os.getenv("TEST_PARQUET", "../../data/processed/test_model_r
 TRAIN_PARQUET = Path(os.getenv("TRAIN_PARQUET", "../../data/processed/train_base.parquet"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "static"))
 
-# ── Descarga desde S3 (solo si S3_BUCKET está seteado) ──────────────────────
-# En local no seteas S3_BUCKET, así que esta ruta nunca se ejecuta y todo
-# sigue leyendo directo del disco como siempre. En Lambda, S3_BUCKET sí
-# está seteado y estas funciones bajan los parquets a /tmp antes de que
-# DataLoader los lea.
+#Download from S3 if configured (Lambda). No-op in local dev.
 S3_BUCKET = os.getenv("S3_BUCKET")
 S3_PREDICTIONS_PREFIX = os.getenv("S3_PREDICTIONS_PREFIX", "predictions/")
 S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
 
-# Nombres exactos que data_loader.py espera encontrar en PRED_DIR (ver la
-# lista `for model in ["baseline", "gated", "cross_attention", "ensemble"]`
-# y `gated_gates.parquet` en DataLoader.__init__). Los pedimos por nombre
-# fijo en vez de listar el prefijo — así el role solo necesita s3:GetObject,
-# tal cual quedó configurado en el Paso 3, sin agregar s3:ListBucket.
-PREDICTION_FILES = [
-    "baseline_raw.parquet",
-    "gated_raw.parquet",
-    "cross_attention_raw.parquet",
-    "ensemble_raw.parquet",
-    "gated_gates.parquet",
-]
+# Files to download from S3 if running in Lambda
+PREDICTION_FILES = ["baseline_raw.parquet",
+                    "gated_raw.parquet",
+                    "cross_attention_raw.parquet",
+                    "ensemble_raw.parquet",
+                    "gated_gates.parquet"]
 
 
 def _download_file_from_s3(bucket: str, key: str, dest_path: Path) -> None:
-    """Descarga un único objeto de S3 a una ruta local exacta."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     boto3.client("s3").download_file(bucket, key, str(dest_path))
 
@@ -73,8 +54,8 @@ async def lifespan(app: FastAPI):
         print(f"Downloading data from s3://{S3_BUCKET} ...")
         for fname in PREDICTION_FILES:
             _download_file_from_s3(S3_BUCKET, f"{S3_PREDICTIONS_PREFIX}{fname}", PRED_DIR / fname)
-        _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TEST_PARQUET.name}", TEST_PARQUET)
-        _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TRAIN_PARQUET.name}", TRAIN_PARQUET)
+            _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TEST_PARQUET.name}", TEST_PARQUET)
+            _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TRAIN_PARQUET.name}", TRAIN_PARQUET)
         print("Download complete.")
 
     #Load Prediction Data
@@ -137,14 +118,11 @@ async def train_stats():
 
 
 @app.get("/api/train/memes")
-async def train_memes(
-    page: int = 1,
-    page_size: int = 24,
-    lang: Optional[str] = None,
-    min_task21_soft: Optional[float] = 0,
-    min_task22_soft: Optional[float] = 0,
-    category: Optional[str] = None,
-    search: Optional[str] = None):
+async def train_memes(page: int = 1,page_size: int = 24,lang: Optional[str] = None,
+                      min_task21_soft: Optional[float] = 0,
+                      min_task22_soft: Optional[float] = 0,
+                      category: Optional[str] = None,
+                      search: Optional[str] = None):
 
     return JSONResponse(dl.get_train_memes(
         page=page,
@@ -171,13 +149,12 @@ async def train_meme_detail(meme_id: str):
 #Get memes
 @app.get("/api/memes")
 async def get_memes(
-    page:int = Query(1,    ge=1),
+    page:int = Query(1,ge=1),
     page_size:int = Query(20, ge=1, le=100),
     lang: Optional[str] = Query(None, description="'en' or 'es'"),
     prediction: Optional[str] = Query(None, description="'sexist' or 'not_sexist'"),
     model: Optional[str] = Query(None, description="Model to filter by prediction"),
-    search: Optional[str] = Query(None, description="Text search in meme text"),
-):
+    search: Optional[str] = Query(None, description="Text search in meme text")):
     """
     Paginated meme list with optional filters.
     Used by: explorer.html
@@ -197,7 +174,7 @@ async def get_memes(
 async def get_meme(meme_id: str):
     """
     Full prediction details for one meme (all models + gates).
-    Used by: explorer.html detail panel, gates.html
+    Used by explorer.html and gates.html
     """
     meme = dl.get_meme_detail(meme_id)
     if meme is None:
@@ -208,10 +185,9 @@ async def get_meme(meme_id: str):
 # Show sorted by disagreement score 
 @app.get("/api/disagreements")
 async def get_disagreements(
-    page:      int = Query(1,  ge=1),
+    page: int = Query(1,  ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    task:      str = Query("2.1", description="Task to check disagreement on: '2.1', '2.2', '2.3'"),
-):
+    task: str = Query("2.1", description="Task to check disagreement on: '2.1', '2.2', '2.3'")):
     """
     Memes where models disagree, sorted by disagreement score.
     Used by: disagree.html
@@ -222,10 +198,9 @@ async def get_disagreements(
 #Gates Endpoint
 @app.get("/api/gates")
 async def get_gates(
-    page:      int = Query(1,      ge=1),
-    page_size: int = Query(24,     ge=1, le=100),
-    sort_by:   str = Query("beta", description="beta | alpha | lambda"),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=100),
+    sort_by: str = Query("beta", description="beta | alpha | lambda")):
     """Gate values per meme with distribution histograms. Used by: gates.html"""
     return JSONResponse(dl.get_gates_data(page=page, page_size=page_size, sort_by=sort_by))
 
@@ -236,9 +211,5 @@ async def get_models():
     return JSONResponse({"models": dl.available_models})
 
 
-# ── Lambda handler ────────────────────────────────────────────────────────
-# Mangum traduce entre el evento de Lambda (o la Function URL) y el
-# protocolo ASGI que espera FastAPI. En local, uvicorn sigue usando `app`
-# directamente y nunca toca esta línea — este handler solo se invoca
-# cuando el contenedor corre dentro de Lambda.
+# Lambda Handler 
 handler = Mangum(app)
