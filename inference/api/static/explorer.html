@@ -453,7 +453,7 @@ async function renderModalContent(memeId) {
   body.innerHTML = `
     <div class="detail-grid">
       <div>
-        <img src="${imageUrl(data.image_file, 'test')}">
+        <img src="${imageUrl(data.image_file, 'test')}"
              class="detail-img"
              onerror="this.style.minHeight='140px';this.style.background='var(--navy-mid)';">
         ${gatesHtml}

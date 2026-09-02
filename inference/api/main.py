@@ -29,8 +29,6 @@ import boto3
 
 #Paths
 PRED_DIR = Path(os.getenv("PRED_DIR", "../../inference/predictions"))
-TEST_IMG_DIR = Path(os.getenv("TEST_IMG_DIR", "../../data/memes/test/memes"))
-TRAIN_IMG_DIR = Path(os.getenv("TRAIN_IMG_DIR", "../../data/memes/train/memes"))
 TEST_PARQUET = Path(os.getenv("TEST_PARQUET", "../../data/processed/test_model_ready.parquet"))
 TRAIN_PARQUET = Path(os.getenv("TRAIN_PARQUET", "../../data/processed/train_base.parquet"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "static"))
@@ -119,17 +117,6 @@ async def disagree_page():
 @app.get("/train", include_in_schema=False)
 async def train_page():
     return FileResponse(STATIC_DIR / "train.html")
-
-
-#Images Serving
-@app.get("/images/{filename}", include_in_schema=False)
-async def serve_image(filename: str):
-    for img_dir in [TEST_IMG_DIR, TRAIN_IMG_DIR]:
-        path = img_dir / filename
-        if path.exists():
-            return FileResponse(path)
-
-    raise HTTPException(status_code=404, detail="Image not found")
 
 
 # API Endpoints
