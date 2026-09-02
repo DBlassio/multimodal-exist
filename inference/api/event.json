@@ -1,0 +1,29 @@
+{
+  "version": "2.0",
+  "routeKey": "$default",
+  "rawPath": "/api/models",
+  "rawQueryString": "",
+  "headers": {
+    "host": "localhost",
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "accountId": "anonymous",
+    "apiId": "test-api",
+    "domainName": "localhost",
+    "domainPrefix": "test",
+    "http": {
+      "method": "GET",
+      "path": "/api/models",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "curl-test"
+    },
+    "requestId": "test-request-id",
+    "routeKey": "$default",
+    "stage": "$default",
+    "time": "17/Aug/2026:13:11:40 +0000",
+    "timeEpoch": 1755439900000
+  },
+  "isBase64Encoded": false
+}

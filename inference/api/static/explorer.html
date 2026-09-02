@@ -319,7 +319,7 @@ function renderGrid(memes) {
 
     return `
       <div class="meme-card" ${agreeClass} onclick="openMemeDetail('${meme.id}')">
-        <img src="/images/${encodeURIComponent(meme.image_file)}"
+        <img src="${imageUrl(meme.image_file, 'test')}"
              alt="Meme ${meme.id}"
              loading="lazy"
              onerror="this.style.display='none'">
@@ -453,7 +453,7 @@ async function renderModalContent(memeId) {
   body.innerHTML = `
     <div class="detail-grid">
       <div>
-        <img src="/images/${encodeURIComponent(data.image_file)}"
+        <img src="${imageUrl(data.image_file, 'test')}"
              class="detail-img"
              onerror="this.style.minHeight='140px';this.style.background='var(--navy-mid)';">
         ${gatesHtml}

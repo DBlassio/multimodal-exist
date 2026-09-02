@@ -15,24 +15,48 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import os
-
 from data_loader import DataLoader
-
-# ── Paths (relative to project root, adjust if needed) ──────────────────────
+from mangum import Mangum
+import boto3
 
 #Paths
-PRED_DIR = Path("../../inference/predictions")
-TEST_IMG_DIR   = Path("../../data/memes/test/memes")
-TRAIN_IMG_DIR   = Path("../../data/memes/train/memes")
-TEST_PARQUET = Path("../../data/processed/test_model_ready.parquet")
-TRAIN_PARQUET = Path("../../data/processed/train_base.parquet")
-STATIC_DIR  = Path("static")
+PRED_DIR = Path(os.getenv("PRED_DIR", "../../inference/predictions"))
+TEST_PARQUET = Path(os.getenv("TEST_PARQUET", "../../data/processed/test_model_ready.parquet"))
+TRAIN_PARQUET = Path(os.getenv("TRAIN_PARQUET", "../../data/processed/train_base.parquet"))
+STATIC_DIR = Path(os.getenv("STATIC_DIR", "static"))
+
+#Download from S3 if configured (Lambda). No-op in local dev.
+S3_BUCKET = os.getenv("S3_BUCKET")
+S3_PREDICTIONS_PREFIX = os.getenv("S3_PREDICTIONS_PREFIX", "predictions/")
+S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
+
+# Files to download from S3 if running in Lambda
+PREDICTION_FILES = ["baseline_raw.parquet",
+                    "gated_raw.parquet",
+                    "cross_attention_raw.parquet",
+                    "ensemble_raw.parquet",
+                    "gated_gates.parquet"]
+
+
+def _download_file_from_s3(bucket: str, key: str, dest_path: Path) -> None:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    boto3.client("s3").download_file(bucket, key, str(dest_path))
+
 
 dl: DataLoader = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global dl
+
+    #Download from S3 if configured (Lambda). No-op in local dev.
+    if S3_BUCKET:
+        print(f"Downloading data from s3://{S3_BUCKET} ...")
+        for fname in PREDICTION_FILES:
+            _download_file_from_s3(S3_BUCKET, f"{S3_PREDICTIONS_PREFIX}{fname}", PRED_DIR / fname)
+            _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TEST_PARQUET.name}", TEST_PARQUET)
+            _download_file_from_s3(S3_BUCKET, f"{S3_PROCESSED_PREFIX}{TRAIN_PARQUET.name}", TRAIN_PARQUET)
+        print("Download complete.")
 
     #Load Prediction Data
     print("Loading train and prediction data...")
@@ -76,17 +100,6 @@ async def train_page():
     return FileResponse(STATIC_DIR / "train.html")
 
 
-#Images Serving
-@app.get("/images/{filename}", include_in_schema=False)
-async def serve_image(filename: str):
-    for img_dir in [TEST_IMG_DIR, TRAIN_IMG_DIR]:
-        path = img_dir / filename
-        if path.exists():
-            return FileResponse(path)
-
-    raise HTTPException(status_code=404, detail="Image not found")
-
-
 # API Endpoints
 
 #Glogal Stats
@@ -105,14 +118,11 @@ async def train_stats():
 
 
 @app.get("/api/train/memes")
-async def train_memes(
-    page: int = 1,
-    page_size: int = 24,
-    lang: Optional[str] = None,
-    min_task21_soft: Optional[float] = 0,
-    min_task22_soft: Optional[float] = 0,
-    category: Optional[str] = None,
-    search: Optional[str] = None):
+async def train_memes(page: int = 1,page_size: int = 24,lang: Optional[str] = None,
+                      min_task21_soft: Optional[float] = 0,
+                      min_task22_soft: Optional[float] = 0,
+                      category: Optional[str] = None,
+                      search: Optional[str] = None):
 
     return JSONResponse(dl.get_train_memes(
         page=page,
@@ -139,13 +149,12 @@ async def train_meme_detail(meme_id: str):
 #Get memes
 @app.get("/api/memes")
 async def get_memes(
-    page:int = Query(1,    ge=1),
+    page:int = Query(1,ge=1),
     page_size:int = Query(20, ge=1, le=100),
     lang: Optional[str] = Query(None, description="'en' or 'es'"),
     prediction: Optional[str] = Query(None, description="'sexist' or 'not_sexist'"),
     model: Optional[str] = Query(None, description="Model to filter by prediction"),
-    search: Optional[str] = Query(None, description="Text search in meme text"),
-):
+    search: Optional[str] = Query(None, description="Text search in meme text")):
     """
     Paginated meme list with optional filters.
     Used by: explorer.html
@@ -165,7 +174,7 @@ async def get_memes(
 async def get_meme(meme_id: str):
     """
     Full prediction details for one meme (all models + gates).
-    Used by: explorer.html detail panel, gates.html
+    Used by explorer.html and gates.html
     """
     meme = dl.get_meme_detail(meme_id)
     if meme is None:
@@ -176,10 +185,9 @@ async def get_meme(meme_id: str):
 # Show sorted by disagreement score 
 @app.get("/api/disagreements")
 async def get_disagreements(
-    page:      int = Query(1,  ge=1),
+    page: int = Query(1,  ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    task:      str = Query("2.1", description="Task to check disagreement on: '2.1', '2.2', '2.3'"),
-):
+    task: str = Query("2.1", description="Task to check disagreement on: '2.1', '2.2', '2.3'")):
     """
     Memes where models disagree, sorted by disagreement score.
     Used by: disagree.html
@@ -190,10 +198,9 @@ async def get_disagreements(
 #Gates Endpoint
 @app.get("/api/gates")
 async def get_gates(
-    page:      int = Query(1,      ge=1),
-    page_size: int = Query(24,     ge=1, le=100),
-    sort_by:   str = Query("beta", description="beta | alpha | lambda"),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=100),
+    sort_by: str = Query("beta", description="beta | alpha | lambda")):
     """Gate values per meme with distribution histograms. Used by: gates.html"""
     return JSONResponse(dl.get_gates_data(page=page, page_size=page_size, sort_by=sort_by))
 
@@ -202,3 +209,7 @@ async def get_gates(
 async def get_models():
     """List of available models."""
     return JSONResponse({"models": dl.available_models})
+
+
+# Lambda Handler 
+handler = Mangum(app)

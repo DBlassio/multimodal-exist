@@ -335,7 +335,7 @@ function renderList(memes) {
     return `
       <div class="disagree-row" onclick="openDisagreeDetail('${m.id}')">
         <img class="disagree-thumb"
-             src="/images/${encodeURIComponent(m.image_file)}"
+             src="${imageUrl(m.image_file, 'test')}"
              loading="lazy"
              onerror="this.style.background='var(--navy-mid)';">
         <div class="disagree-info">

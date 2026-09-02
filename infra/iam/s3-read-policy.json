@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadPredictionsAndProcessed",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::multimodal-exist/predictions/*",
+        "arn:aws:s3:::multimodal-exist/processed/*"
+      ]
+    }
+  ]
+}

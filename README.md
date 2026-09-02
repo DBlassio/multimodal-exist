@@ -84,18 +84,9 @@ All models are trained multi-task (Tasks 2.1, 2.2, 2.3 simultaneously) with mask
 - **Interpretable fusion:** Per-meme gate values expose *which brain regions the model relies on* for each meme — a novel interpretability angle for multimodal hate speech detection.
 
 ---
+## Live Demo
 
-## Demo API
-
-A FastAPI + vanilla JS demo for exploring predictions and gate visualizations.
-
-```bash
-cd inference/api
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-Open `http://localhost:8000`
+🔗 **[Try it live](https://l5d44wa2ih2l6pt6nkgnlhus3i0bncjh.lambda-url.us-east-1.on.aws/)**
 
 **Pages:**
 - **Overview** — global stats, model comparison, gate summary
@@ -103,5 +94,8 @@ Open `http://localhost:8000`
 - **Gates** — distribution of β/α/λ gate values, sortable by modality
 - **Disagree** — memes where models diverge, ranked by uncertainty
 - **Train Dataset** — human annotation scores across 3,984 training memes
+
+**Design notes:**
+- The API never runs live model inference, it only serves precomputed predictions.
 
 ---

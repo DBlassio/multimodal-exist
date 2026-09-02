@@ -1,5 +1,6 @@
 """
-Data Loader — loads and serves all prediction data for the API.
+Data Loader. 
+Loads and serves all prediction data for the API.
 All heavy data is loaded once at startup and kept in memory.
 """
 
@@ -17,26 +18,23 @@ TRAIN_FREQ = {
     "p23_stereotyping":    0.225,
     "p23_objectification": 0.220,
     "p23_sexual_violence": 0.068,
-    "p23_misogyny":        0.025,
-}
+    "p23_misogyny":        0.025}
 
 # Mapping Category labels
 CAT_COLS = {
-    "IDEOLOGICAL-INEQUALITY":       "p23_ideological",
+    "IDEOLOGICAL-INEQUALITY": "p23_ideological",
     "MISOGYNY-NON-SEXUAL-VIOLENCE": "p23_misogyny",
-    "OBJECTIFICATION":              "p23_objectification",
-    "SEXUAL-VIOLENCE":              "p23_sexual_violence",
-    "STEREOTYPING-DOMINANCE":       "p23_stereotyping",
-}
+    "OBJECTIFICATION": "p23_objectification",
+    "SEXUAL-VIOLENCE": "p23_sexual_violence",
+    "STEREOTYPING-DOMINANCE": "p23_stereotyping"}
 
 
 #Model Labels
 MODEL_LABELS = {
-    "baseline":       "Early Fusion",
-    "gated":          "Gated Fusion",
+    "baseline": "Early Fusion",
+    "gated": "Gated Fusion",
     "cross_attention":"Cross-Attention",
-    "ensemble":       "Ensemble",
-}
+    "ensemble": "Ensemble"}
 
 
 #DataLoader ---------------------------------------------------------------------------------------
@@ -426,14 +424,14 @@ class DataLoader:
                 p21 = round(float(gated.loc[mid, "p21"]), 4)
 
             memes.append({
-                "id":          mid,
-                "lang":        row["lang"],
-                "text":        str(row["text"])[:200],
-                "image_file":  str(row["image_file"]),
-                "gate_beta":   round(float(row["gate_beta"]),   4),
-                "gate_alpha":  round(float(row["gate_alpha"]),  4),
+                "id": mid,
+                "lang": row["lang"],
+                "text": str(row["text"])[:200],
+                "image_file": str(row["image_file"]),
+                "gate_beta": round(float(row["gate_beta"]),   4),
+                "gate_alpha": round(float(row["gate_alpha"]),  4),
                 "gate_lambda": round(float(row["gate_lambda"]), 4),
-                "p21":         p21,
+                "p21": p21,
             })
 
         # Distribution histograms (all 1053 values, not paginated)
@@ -447,19 +445,19 @@ class DataLoader:
             hist, edges = np.histogram(vals, bins=20, range=(0.0, 1.0))
             distribution[key] = {
                 "counts": hist.tolist(),
-                "edges":  [round(float(e), 3) for e in edges.tolist()],
-                "mean":   round(float(np.mean(vals)), 4),
+                "edges": [round(float(e), 3) for e in edges.tolist()],
+                "mean": round(float(np.mean(vals)), 4),
                 "median": round(float(np.median(vals)), 4),
-                "std":    round(float(np.std(vals)), 4),
+                "std": round(float(np.std(vals)), 4),
             }
 
         return {
-            "total":        total,
-            "page":         page,
-            "page_size":    page_size,
-            "pages":        max(1, -(-total // page_size)),
-            "sort_by":      sort_by,
-            "memes":        memes,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": max(1, -(-total // page_size)),
+            "sort_by": sort_by,
+            "memes": memes,
             "distribution": distribution,
         }
     
@@ -479,8 +477,8 @@ class DataLoader:
         for model in self.available_models:
             p21_col  = f"{model}_p21"
             pred_col = f"{model}_pred21"
-            p_d_col  = f"{model}_p22_direct"
-            p_j_col  = f"{model}_p22_judg"
+            p_d_col = f"{model}_p22_direct"
+            p_j_col = f"{model}_p22_judg"
 
             sexist_mask = self.df[pred_col] == "SEXIST"
             stats["models"][model] = {
