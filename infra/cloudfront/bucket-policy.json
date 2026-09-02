@@ -11,7 +11,7 @@
       "Resource": "arn:aws:s3:::multimodal-exist/images/*",
       "Condition": {
         "StringEquals": {
-          "AWS:SourceArn": "arn:aws:cloudfront::152307460224:distribution/REEMPLAZAR_CON_DISTRIBUTION_ID"
+          "AWS:SourceArn": "arn:aws:cloudfront::152307460224:distribution/E2D0TRE41ID0S6"
         }
       }
     }

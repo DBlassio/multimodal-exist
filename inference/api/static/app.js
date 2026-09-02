@@ -31,7 +31,7 @@ function agreeBadge(agree) {
 }
 
 // ── Image URL ─────────────────────────────────────────────────────────────
-const CLOUDFRONT_DOMAIN = 'PENDIENTE_DOMINIO_CLOUDFRONT'; // ej: d123abc456.cloudfront.net
+const CLOUDFRONT_DOMAIN = 'd3ujr2e83b59w.cloudfront.net';
 
 function imageUrl(filename, split = 'test') {
   return `https://${CLOUDFRONT_DOMAIN}/${split}/${encodeURIComponent(filename)}`;
